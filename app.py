@@ -373,7 +373,7 @@ else:
                             st.markdown(item["text"])
                 else:
                     st.markdown(message["content"])
-                        st.divider()
+                    st.divider()
 
     # --- AREA INPUT MULTIMODAL & DOKUMEN ---
     input_container = st.container()
