@@ -188,17 +188,6 @@ def login_page():
             <div class="login-title">🔮 Qwen Workspace</div>
             <div class="login-subtitle">Akses sistem analitik terintegrasi</div>
 
-            <!-- Form HTML untuk tampilan yang lebih rapi -->
-            <div style="text-align: left; margin-bottom: 1rem;">
-                <label style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 5px; display: block;">Identitas Pengguna</label>
-                <input type="text" id="user-name" class="stTextInput" placeholder="Masukkan nama Anda..." style="width: 100%; padding: 12px; background: var(--input-bg); border: 1px solid var(--border-color); color: white; border-radius: 6px; font-family: 'Inter', sans-serif;" required>
-            </div>
-
-            <button id="login-btn" style="width: 100%; padding: 12px; background: var(--accent-color); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Masuk ke Sistem</button>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
     # Logika Streamlit untuk menangani submit
     # Kita gunakan form Streamlit native tapi dengan label kosong agar sesuai CSS
     with st.form("login_form", clear_on_submit=False):
@@ -438,7 +427,7 @@ else:
                     model=MODEL_NAME,
                     messages=st.session_state.messages,
                     temperature=0.7,
-                    max_tokens=4096,
+                    max_tokens=8192,
                     stream=True
                 )
 
