@@ -184,7 +184,6 @@ def login_page():
     """Halaman Login Minimalis Mode Gelap"""
     <div class="login-wrapper">
         <div class="login-card">
-            <div class="login-title">🔮 Qwen Workspace</div>
             <div class="login-subtitle">Akses sistem analitik terintegrasi</div>
 
     # Logika Streamlit untuk menangani submit
