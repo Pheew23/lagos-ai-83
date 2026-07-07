@@ -39,15 +39,18 @@ def ekstrak_teks_dari_dokumen(uploaded_file):
         
     return teks_hasil.strip()
 
-# --- 2. FUNGSI UNTUK MEMBUAT FILE WORD (.DOCX) ---
+# --- 2. FUNGSI UNTUK MEMBUAT FILE WORD (.DOCX) - VERSI RAPI & ANTI BERANTAKAN ---
 def buat_file_word(riwayat_pesan):
     doc = Document()
+    
+    # Mengatur judul utama dokumen
     doc.add_heading('Draf Hasil Kerja AI - Qwen Workspace', level=0)
     
     for msg in riwayat_pesan:
         if msg["role"] == "system":
             continue
             
+        # 1. PARSING INPUT USER
         if msg["role"] == "user":
             doc.add_heading("Pertanyaan / Instruksi Anda:", level=2)
             if isinstance(msg["content"], list):
@@ -56,31 +59,57 @@ def buat_file_word(riwayat_pesan):
                         doc.add_paragraph(item["text"])
             elif isinstance(msg["content"], str):
                 doc.add_paragraph(msg["content"])
-                    
+                
+        # 2. PARSING JAWABAN AI (YANG SERING BERANTAKAN)
         elif msg["role"] == "assistant":
             doc.add_heading("Jawaban AI:", level=2)
+            
+            # Memisah jawaban berdasarkan baris demi baris
             paragraf_list = msg["content"].split('\n')
+            
             for p_text in paragraf_list:
-                if not p_text.strip():
-                    continue
+                teks_bersih = p_text.strip()
+                if not teks_bersih:
+                    continue  # Lewati baris kosong
                 
-                match_heading = re.match(r'^(#{1,6})\s+(.*)$', p_text.strip())
+                # A. Deteksi Heading / Judul (### Judul)
+                match_heading = re.match(r'^(#{1,6})\s+(.*)$', teks_bersih)
                 if match_heading:
                     level_pagar = len(match_heading.group(1))
-                    teks_judul = match_heading.group(2).replace('**', '')
-                    doc.add_heading(teks_judul, level=min(level_pagar, 3))
+                    konten_judul = match_heading.group(2).replace('**', '').replace('*', '')
+                    # Batasi level heading Word maksimal level 3 agar tidak terlalu kecil
+                    doc.add_heading(konten_judul, level=min(level_pagar, 3))
                     continue
                 
-                p = doc.add_paragraph()
-                parts = re.split(r'(\*\*.*?\*\*)', p_text)
+                # B. Deteksi Bullet List (- Poin atau * Poin)
+                is_bullet = False
+                if teks_bersih.startswith('- ') or teks_bersih.startswith('* '):
+                    teks_bersih = teks_bersih[2:]  # Hapus simbol - atau *
+                    p = doc.add_paragraph(style='List Bullet')
+                    is_bullet = True
+                # C. Deteksi Numbered List (1. Poin atau 2. Poin)
+                elif re.match(r'^\d+\.\s+', teks_bersih):
+                    # Temukan pola angka dan hapus agar penomoran rapi dari Word
+                    teks_bersih = re.sub(r'^\d+\.\s+', '', teks_bersih)
+                    p = doc.add_paragraph(style='List Number')
+                else:
+                    p = doc.add_paragraph()
+                
+                # D. Format Teks Tebal (Menerjemahkan **teks** menjadi Bold asli Word)
+                # Regex ini memecah teks berdasarkan penanda bintang ganda
+                parts = re.split(r'(\*\*.*?\*\*)', teks_bersih)
                 for part in parts:
                     if part.startswith('**') and part.endswith('**'):
-                        p.add_run(part.replace('**', '')).bold = True
+                        # Ambil teks di dalam bintang dan set bold menjadi True
+                        teks_tebal = part.replace('**', '')
+                        p.add_run(teks_tebal).bold = True
                     else:
+                        # Teks biasa tanpa format
                         p.add_run(part)
                         
+            # Beri garis pembatas antar sesi chat biar rapi
             p_line = doc.add_paragraph()
-            p_line.add_run("_" * 40).italic = True
+            p_line.add_run("_" * 50).italic = True
             
     bio = io.BytesIO()
     doc.save(bio)
