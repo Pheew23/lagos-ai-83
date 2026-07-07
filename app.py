@@ -299,7 +299,6 @@ else:
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
 
     # Sidebar
     with st.sidebar:
