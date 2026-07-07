@@ -182,7 +182,6 @@ def init_session_state():
 
 def login_page():
     """Halaman Login Minimalis Mode Gelap"""
-    st.markdown("""
     <div class="login-wrapper">
         <div class="login-card">
             <div class="login-title">🔮 Qwen Workspace</div>
