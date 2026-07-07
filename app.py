@@ -399,7 +399,7 @@ else:
 
         if uploaded_file:
             with st.spinner("Menganalisis dokumen...
-                        isi_teks = ekstrak_teks_dari_dokumen(uploaded_file)
+                isi_teks = ekstrak_teks_dari_dokumen(uploaded_file)
             if isi_teks:
                 konteks_dokumen = f"Dokumen ({uploaded_file.name}):\n\"\"\"\n{isi_teks}\n\"\"\"\n\n"
             else:
