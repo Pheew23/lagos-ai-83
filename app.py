@@ -126,8 +126,8 @@ if "messages" not in st.session_state:
     ]
 
 # --- 6. TAMPILAN UTAMA INTERFASE CHAT ---
-st.title("🔮 Lagos AI 8.1 (Vision + Document)")
-st.caption("Workspace Gemini-Style: Unggah Gambar (JPG/PNG) dan Dokumen (PDF/TXT) secara bersamaan.")
+st.title("🔮 Lagos AI 8.3 (Vision + Document)")
+st.caption("Bisa Apa Saja AKU?. Tentukan Sendiri")
 
 # Tampilkan riwayat chat
 for message in st.session_state.messages:
