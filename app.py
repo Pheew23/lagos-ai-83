@@ -296,7 +296,6 @@ else:
                 <h1 style="margin:0; font-size: 1.8rem; font-weight: 700; color: var(--text-main);">Qwen 3.5 <span style="color: var(--text-muted); font-weight: 400; font-size: 1rem;">| Analitik</span></h1>
             </div>
             <div class="user-badge">
-                👤 {st.session_state.username}
             </div>
         </div>
     </div>
