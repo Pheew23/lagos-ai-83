@@ -265,8 +265,8 @@ if user_input:
             response_stream = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=st.session_state.messages,
-                temperature=0.6,
-                max_tokens=4096,
+                temperature=0.7,
+                max_tokens=8192,
                 stream=True
             )
             
