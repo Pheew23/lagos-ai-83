@@ -255,17 +255,17 @@ for message in st.session_state.messages:
 # --- 6. KOLOM INPUT UTAMA ---
 prompt = st.chat_input("Tanyakan analisis ke Lagos AI...")
 
-# --- 7. LOGIKA EKSEKUSI DATA ---
+# --- 7. LOGIKA PROSES (VERSI OPTIMASI MEMORI ANTI-RESET) ---
 if prompt:
     teks_perintah = prompt.strip()
     konten_payload = []
 
-    # Inject Gambar jika ada
+    # 1. Masukkan gambar ke request SEKARANG saja, jangan disimpan permanen di riwayat chat mendatang
     if st.session_state.uploaded_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.uploaded_image)
         konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
 
-    # Inject Isi Dokumen jika ada
+    # 2. Masukkan konten dokumen jika ada
     teks_dokumen = ""
     if st.session_state.uploaded_file:
         with st.spinner("Membaca dokumen teks..."):
@@ -276,11 +276,54 @@ if prompt:
     final_prompt = teks_dokumen + teks_perintah
     konten_payload.append({"type": "text", "text": final_prompt})
 
-    # Tampilkan prompt user di UI
+    # Tampilkan ke UI user
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # SIMPAN KE STATE: Untuk request saat ini, kita kirim multimodal payload lengkap
     st.session_state.messages.append({"role": "user", "content": konten_payload})
+
+    # Response Streaming dari Model AI
+    with st.chat_message("assistant"):
+        client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+        placeholder = st.empty()
+        full_response = ""
+
+        try:
+            response_stream = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=st.session_state.messages,
+                temperature=0.7,
+                max_tokens=4096, # Disesuaikan agar aman dari limit token keluaran
+                stream=True
+            )
+
+            for chunk in response_stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full_response += delta
+                        placeholder.markdown(full_response + "▌")
+
+            placeholder.markdown(full_response)
+            
+            # --- STRATEGI PENYELAMAT MEMORI ---
+            # Mengubah payload user terakhir dari format base64 gambar yang berat menjadi TEKS SAJA 
+            # agar chat berikutnya tidak menanggung beban gambar lama.
+            st.session_state.messages[-1] = {"role": "user", "content": f"[User menanyakan gambar/dokumen] {prompt}"}
+            
+            # Baru masukkan respon AI ke dalam riwayat
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+            # Otomatis kosongkan file uploader di UI setelah sukses dianalisis sekali
+            st.session_state.uploaded_image = None
+            st.session_state.uploaded_file = None
+
+        except Exception as e:
+            st.error(f"Terjadi kesalahan teknis API: {str(e)}")
+            # Jika error, hapus input terakhir agar tidak merusak state
+            if st.session_state.messages[-1]["role"] == "user":
+                st.session_state.messages.pop()
 
     # Response Streaming dari Model AI
     with st.chat_message("assistant"):
