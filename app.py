@@ -4,281 +4,360 @@ import io
 import re
 import base64
 from docx import Document
-# Import pustaka untuk membaca PDF
-from pypdf import PdfReader
 
-# --- 1. KONFIGURASI UTAMA STREAMLIT ---
+# --- 1. KONFIGURASI HALAMAN & TEMA ---
 st.set_page_config(
-    page_title="Qwen 3.5 Document Workspace",
+    page_title="Lagos AI 9.1 | Advanced Workspace",
     page_icon="🔮",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- FUNGSI PEMBANTU: KONVERSI GAMBAR KE BASE64 ---
+# --- API KEY YANG DISEMBATKAN (HANYA UNTUK PENGGUNAAN PRIBADI) ---
+# ⚠️ JANGAN BAGIKAN KODE INI KE ORANG LAIN ATAU UPLOAD KE GITHUB
+API_KEY = "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"
+BASE_URL = "https://integrate.api.nvidia.com/v1"
+MODEL_NAME = "qwen/qwen3.5-397b-a17b"
+
+# --- CUSTOM CSS UNTUK UI/UX MODERN ---
+def load_custom_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        .stApp {
+            background-color: #0e1117;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .chat-message {
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid #262730;
+        }
+
+        .chat-message.user {
+            background-color: #2b2d31;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .chat-message.assistant {
+            background-color: #1a1a1a;
+            border-left: 4px solid #7d4eff;
+        }
+
+        .chat-avatar {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            line-height: 1.2;
+        }
+
+        .chat-content {
+            flex: 1;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #7d4eff, #00d2ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #888;
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .upload-box {
+            background: #161b22;
+            border: 2px dashed #30363d;
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .upload-box:hover {
+            border-color: #7d4eff;
+            background: #1c2128;
+        }
+
+        section[data-testid="stSidebar"] {
+            background-color: #0d0f14;
+            border-right: 1px solid #262730;
+        }
+
+        .stButton>button {
+            background: linear-gradient(90deg, #7d4eff, #5a32d6);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        .stButton>button:hover {
+            transform: scale(1.02);
+            background: linear-gradient(90deg, #8e5bff, #6b42e6);
+        }
+
+        .danger-btn > button {
+            background: #3a1c1c;
+            color: #ff6b6b;
+            border: 1px solid #ff6b6b;
+        }
+        .danger-btn > button:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+load_custom_css()
+
+# --- FUNGSI PEMBANTU ---
+
+@st.cache_data(show_spinner=False)
 def konversi_gambar_ke_base64(uploaded_file):
     if uploaded_file is not None:
         return base64.b64encode(uploaded_file.read()).decode('utf-8')
     return None
 
-# --- FUNGSI PEMBANTU: EKSTRAKSI TEKS DARI PDF/TXT ---
+@st.cache_data(show_spinner=False)
 def ekstrak_teks_dari_dokumen(uploaded_file):
     teks_hasil = ""
     nama_file = uploaded_file.name.lower()
-    
+
     try:
         if nama_file.endswith('.pdf'):
             reader = PdfReader(uploaded_file)
             for page in reader.pages:
-                teks_halaman = page.extract_text()
-                if teks_halaman:
-                    teks_hasil += teks_halaman + "\n"
+                teks = page.extract_text()
+                if teks:
+                    teks_hasil += teks + "\n"
         elif nama_file.endswith('.txt'):
             teks_hasil = uploaded_file.read().decode("utf-8")
+        return teks_hasil.strip()
     except Exception as e:
-        st.error(f"Gagal mengekstrak dokumen {uploaded_file.name}: {e}")
-        
-    return teks_hasil.strip()
+        st.error(f"Gagal membaca dokumen: {str(e)}")
+        return ""
 
-# --- 2. FUNGSI UNTUK MEMBUAT FILE WORD (.DOCX) - VERSI RAPI & ANTI BERANTAKAN ---
 def buat_file_word(riwayat_pesan):
     doc = Document()
-    
-    # Mengatur judul utama dokumen
-    doc.add_heading('Draf Hasil Kerja AI - Qwen Workspace', level=0)
-    
+    doc.add_heading('Lagos AI - Laporan Analisis', 0)
+
     for msg in riwayat_pesan:
-        if msg["role"] == "system":
-            continue
-            
-        # 1. PARSING INPUT USER
-        if msg["role"] == "user":
-            doc.add_heading("Pertanyaan / Instruksi Anda:", level=2)
-            if isinstance(msg["content"], list):
-                for item in msg["content"]:
-                    if item["type"] == "text":
-                        doc.add_paragraph(item["text"])
-            elif isinstance(msg["content"], str):
-                doc.add_paragraph(msg["content"])
-                
-        # 2. PARSING JAWABAN AI (YANG SERING BERANTAKAN)
-        elif msg["role"] == "assistant":
-            doc.add_heading("Jawaban AI:", level=2)
-            
-            # Memisah jawaban berdasarkan baris demi baris
-            paragraf_list = msg["content"].split('\n')
-            
-            for p_text in paragraf_list:
-                teks_bersih = p_text.strip()
-                if not teks_bersih:
-                    continue  # Lewati baris kosong
-                
-                # A. Deteksi Heading / Judul (### Judul)
-                match_heading = re.match(r'^(#{1,6})\s+(.*)$', teks_bersih)
-                if match_heading:
-                    level_pagar = len(match_heading.group(1))
-                    konten_judul = match_heading.group(2).replace('**', '').replace('*', '')
-                    # Batasi level heading Word maksimal level 3 agar tidak terlalu kecil
-                    doc.add_heading(konten_judul, level=min(level_pagar, 3))
-                    continue
-                
-                # B. Deteksi Bullet List (- Poin atau * Poin)
-                is_bullet = False
-                if teks_bersih.startswith('- ') or teks_bersih.startswith('* '):
-                    teks_bersih = teks_bersih[2:]  # Hapus simbol - atau *
-                    p = doc.add_paragraph(style='List Bullet')
-                    is_bullet = True
-                # C. Deteksi Numbered List (1. Poin atau 2. Poin)
-                elif re.match(r'^\d+\.\s+', teks_bersih):
-                    # Temukan pola angka dan hapus agar penomoran rapi dari Word
-                    teks_bersih = re.sub(r'^\d+\.\s+', '', teks_bersih)
-                    p = doc.add_paragraph(style='List Number')
-                else:
-                    p = doc.add_paragraph()
-                
-                # D. Format Teks Tebal (Menerjemahkan **teks** menjadi Bold asli Word)
-                # Regex ini memecah teks berdasarkan penanda bintang ganda
-                parts = re.split(r'(\*\*.*?\*\*)', teks_bersih)
-                for part in parts:
-                    if part.startswith('**') and part.endswith('**'):
-                        # Ambil teks di dalam bintang dan set bold menjadi True
-                        teks_tebal = part.replace('**', '')
-                        p.add_run(teks_tebal).bold = True
-                    else:
-                        # Teks biasa tanpa format
-                        p.add_run(part)
-                        
-            # Beri garis pembatas antar sesi chat biar rapi
-            p_line = doc.add_paragraph()
-            p_line.add_run("_" * 50).italic = True
-            
+        if msg["role"] == "system": continue
+
+        role_title = "User" if msg["role"] == "user" else "AI Assistant"
+        doc.add_heading(f"{role_title}", level=2)
+
+        content = msg["content"]
+        if isinstance(content, list):
+            text_content = next((item["text"] for item in content if item["type"] == "text"), "")
+        else:
+            text_content = str(content)
+
+        lines = text_content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+
+            if line.startswith('# '): doc.add_heading(line[2:], 3)
+            elif line.startswith('- '): doc.add_paragraph(line[2:], style='List Bullet')
+            elif re.match(r'^\d+\.\s', line): doc.add_paragraph(line[3:], style='List Number')
+            else: doc.add_paragraph(line)
+
+        doc.add_paragraph("\n" + "_"*50)
+
     bio = io.BytesIO()
     doc.save(bio)
     bio.seek(0)
     return bio
 
-# --- 3. PANEL CONTROL SIDEBAR ---
+# --- SIDEBAR: INFO & RESET ---
 with st.sidebar:
-    st.title("🔮 Kontrol AI")
-    st.info("⚡ Model: Qwen 3.5 122B (Multimodal + Dokumen)")
-    
+    st.markdown("### ⚙️ Konfigurasi")
+    st.success(f"✅ Model: {MODEL_NAME}")
+    st.info("API Key sudah dikonfigurasi otomatis.")
+
     st.divider()
-    st.markdown("### 📥 Ekspor Dokumen")
+    st.markdown("### 📦 Ekspor Data")
+
     if "messages" in st.session_state and len(st.session_state.messages) > 1:
-        file_word = buat_file_word(st.session_state.messages)
-        st.download_button(
-            label="📥 Download Jadi Word (.docx)",
-            data=file_word,
-            file_name="Analisis_Qwen_Workspace.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True
-        )
+        with st.spinner("📝 Menyusun dokumen..."):
+            file_word = buat_file_word(st.session_state.messages)
+            st.download_button(
+                label="📥 Download Laporan (.docx)",
+                data=file_word,
+                file_name="Lagos_AI_Report.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+                type="primary"
+            )
     else:
-        st.info("Mulai obrolan untuk mengunduh dokumen.")
-            
+        st.info("Mulai percakapan untuk mengunduh laporan.")
+
     st.divider()
-    if st.button("🗑️ Reset & Bersihkan Memori"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+    if st.button("🗑️ Reset Memori", type="secondary", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.uploaded_file = None
+        st.session_state.uploaded_image = None
         st.rerun()
 
-# --- 4. PEMASANGAN API KEY & KONFIGURASI MODEL ---
-BASE_URL = "https://integrate.api.nvidia.com/v1"
-nvidia_api_key = "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"
-MODEL_NAME = "qwen/qwen3.5-122b-a10b"
-
-client = OpenAI(base_url=BASE_URL, api_key=nvidia_api_key)
-
-# --- 5. MANAJEMEN MEMORI CHAT ---
+# --- 2. INISIALISASI SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "system", "content": "Anda adalah Qwen 3.5, asisten analitik tingkat tinggi. Anda dapat menganalisis gambar dan mengekstrak konteks dari file dokumen (PDF/TXT) yang dikirimkan pengguna. Berikan jawaban yang cerdas, mendalam, dan terstruktur dalam Bahasa Indonesia."}
+        {"role": "system", "content": "Anda adalah Lagos AI 9.1 (rian dev), asisten analitik tingkat tinggi. Berikan jawaban cerdas, mendalam, dan terstruktur dalam Bahasa Indonesia."}
     ]
 
-# --- 6. TAMPILAN UTAMA INTERFASE CHAT ---
-st.title("🔮 Lagos AI 8.3 (Vision + Document)")
-st.caption("Bisa Apa Saja AKU?. Tentukan Sendiri")
+if "uploaded_file" not in st.session_state:
+    st.session_state.uploaded_file = None
+if "uploaded_image" not in st.session_state:
+    st.session_state.uploaded_image = None
 
-# Tampilkan riwayat chat
-for message in st.session_state.messages:
-    if message["role"] != "system":
-        with st.chat_message(message["role"]):
-            if isinstance(message["content"], list):
-                for item in message["content"]:
-                    if item["type"] == "text":
-                        st.markdown(item["text"])
-            else:
-                st.markdown(message["content"])
+# --- 3. TAMPILAN UTAMA ---
+st.markdown('<div class="main-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Analisis Multimodal Cerdas: Gambar, Dokumen & Konteks</div>', unsafe_allow_html=True)
 
+# --- 4. AREA INPUT & UPLOAD ---
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown("#### 📷 Unggah Gambar")
+    uploaded_image = st.file_uploader(
+        "Pilih file JPG/PNG", 
+        type=["jpg", "jpeg", "png"],
+        label_visibility="collapsed",
+        key="img_uploader"
+    )
+    if uploaded_image:
+        st.session_state.uploaded_image = uploaded_image
+
+with col2:
+    st.markdown("#### 📄 Unggah Dokumen")
+    uploaded_file = st.file_uploader(
+        "Pilih file PDF/TXT", 
+        type=["pdf", "txt"],
+        label_visibility="collapsed",
+        key="doc_uploader"
+    )
+    if uploaded_file:
+        st.session_state.uploaded_file = uploaded_file
+
+# Tampilan Preview File
+if st.session_state.uploaded_image or st.session_state.uploaded_file:
+    st.divider()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.session_state.uploaded_image:
+            st.image(st.session_state.uploaded_image, caption="Gambar Terlampir", use_container_width=True, width=100)
+            if st.button("Hapus Gambar", key="del_img_btn"):
+                st.session_state.uploaded_image = None
+                st.rerun()
+    with c2:
+        if st.session_state.uploaded_file:
+            st.info(f"📄 {st.session_state.uploaded_file.name}")
+            if st.button("Hapus Dokumen", key="del_doc_btn"):
+                st.session_state.uploaded_file = None
+                st.rerun()
+
+# --- 5. CHAT HISTORY ---
 st.divider()
 
-# --- 7. AREA INPUT MULTIMODAL & DOKUMEN (GAYA GEMINI) ---
-input_container = st.container()
-perintah_final = ""
+for i, message in enumerate(st.session_state.messages):
+    if message["role"] == "system":
+        continue
 
-with input_container:
-    # Baris pertama: Slot Unggah Gambar dan Slot Unggah Dokumen PDF/TXT
-    col_img, col_doc = st.columns(2)
-    
-    with col_img:
-        uploaded_image = st.file_uploader(
-            "Unggah Gambar (JPG/PNG)", 
-            type=["jpg", "jpeg", "png"],
-            label_visibility="collapsed",
-            key="pengunggah_gambar"
-        )
-    
-    with col_doc:
-        uploaded_file = st.file_uploader(
-            "Unggah Dokumen (PDF/TXT)",
-            type=["pdf", "txt"],
-            label_visibility="collapsed",
-            key="pengunggah_dokumen"
-        )
+    role = message["role"]
+    content = message["content"]
 
-    # Preview Interaktif untuk Gambar
-    if uploaded_image:
-        col_img_preview, _ = st.columns([1, 4])
-        with col_img_preview:
-            st.image(uploaded_image, caption="📷 Gambar Terlampir", width=120)
-            if st.button("❌ Hapus Gambar", use_container_width=True, key="del_img"):
-                st.cache_data.clear()
-                st.rerun()
-
-    # Preview Interaktif untuk File Dokumen
-    if uploaded_file:
-        col_doc_preview, _ = st.columns([1, 4])
-        with col_doc_preview:
-            st.info(f"📄 {uploaded_file.name}")
-            if st.button("❌ Hapus Dokumen", use_container_width=True, key="del_doc"):
-                st.cache_data.clear()
-                st.rerun()
-
-    # Kotak Teks Input Utama
-    user_input = st.chat_input("Ketik perintah teks atau tanyakan sesuatu tentang file Anda di sini...")
-
-# --- 8. PROSES EVALUASI RESPONS MULTIMODAL ---
-if user_input:
-    teks_perintah_bersih = str(user_input).strip()
-    
-    # 1. Jika ada dokumen PDF/TXT, ekstrak teks isinya dan rekayasa ke dalam perintah
-    if uploaded_file:
-        with st.spinner("📄 Membaca berkas dokumen..."):
-            isi_teks_dokumen = ekstrak_teks_dari_dokumen(uploaded_file)
-        
-        if isi_teks_dokumen:
-            perintah_final = (
-                f"Berikut adalah isi teks dari dokumen yang diunggah ({uploaded_file.name}):\n"
-                f"\"\"\"\n{isi_teks_dokumen}\n\"\"\"\n\n"
-                f"Pertanyaan/Instruksi User: {teks_perintah_bersih}"
-            )
-        else:
-            perintah_final = teks_perintah_bersih
+    display_text = ""
+    if isinstance(content, list):
+        for item in content:
+            if item["type"] == "text":
+                display_text += item["text"] + "\n"
     else:
-        perintah_final = teks_perintah_bersih
+        display_text = content
 
-    # 2. Format struktur payload multimodal (jika ada gambar)
-    if uploaded_image:
-        base64_image = konversi_gambar_ke_base64(uploaded_image)
-        konten_payload = [
-            {"type": "text", "text": perintah_final},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-            }
-        ]
-    else:
-        konten_payload = perintah_final
-    
-    # Tampilkan teks asli ketikan user di layar agar bersih
+    with st.container():
+        css_class = "user" if role == "user" else "assistant"
+        icon = "👤" if role == "user" else "🤖"
+
+        st.markdown(f"""
+        <div class="chat-message {css_class}">
+            <div class="chat-avatar">{icon}</div>
+            <div class="chat-content">
+                {display_text.replace(chr(10), '<br>')}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# --- 6. INPUT AREA ---
+st.divider()
+prompt = st.chat_input("Ketik pertanyaan Anda di sini... (Contoh: 'Analisis data di dokumen ini')")
+
+# --- 7. LOGIKA PROSES ---
+if prompt:
+    teks_perintah = prompt.strip()
+
+    konten_payload = []
+
+    # Proses Gambar
+    if st.session_state.uploaded_image:
+        base64_img = konversi_gambar_ke_base64(st.session_state.uploaded_image)
+        konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
+
+    # Proses Dokumen
+    teks_dokumen = ""
+    if st.session_state.uploaded_file:
+        with st.spinner("📂 Membaca konten dokumen..."):
+            teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.uploaded_file)
+
+        if teks_dokumen:
+            teks_dokumen = f"[ISI DOKUMEN {st.session_state.uploaded_file.name}]\n{teks_dokumen}\n[AKHIR DOKUMEN]\n\n"
+
+    final_prompt = teks_dokumen + teks_perintah
+    konten_payload.append({"type": "text", "text": final_prompt})
+
     with st.chat_message("user"):
-        st.markdown(teks_perintah_bersih)
-    
-    # Masukkan ke riwayat memori chat utama
-    st.session_state.messages.append({"role": "user", "content": konten_payload})
-    
-    # Ambil respons dari Qwen 3.5
-    with st.chat_message("assistant"):
-        try:
-            placeholder_teks = st.empty()
-            full_response = ""
+        st.markdown(prompt)
 
+    st.session_state.messages.append({"role": "user", "content": konten_payload})
+
+    with st.chat_message("assistant"):
+        client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+
+        placeholder = st.empty()
+        full_response = ""
+
+        try:
             response_stream = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=st.session_state.messages,
                 temperature=0.7,
-                max_tokens=8192,
+                max_tokens=8096,
                 stream=True
             )
-            
+
             for chunk in response_stream:
                 if chunk.choices and len(chunk.choices) > 0:
-                    delta_content = chunk.choices[0].delta.content
-                    if delta_content:
-                        full_response += delta_content
-                        placeholder_teks.markdown(full_response + "▌")
-            
-            placeholder_teks.markdown(full_response)
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full_response += delta
+                        placeholder.markdown(full_response + "▌")
+
+            placeholder.markdown(full_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
+
         except Exception as e:
-            st.error(f"Terjadi kesalahan teknis saat memproses permintaan. Detail: {e}")
+            st.error(f"Terjadi kesalahan: {str(e)}")
+            st.session_state.messages.pop()
