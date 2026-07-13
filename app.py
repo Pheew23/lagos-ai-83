@@ -96,12 +96,6 @@ API_KEY = "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
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512"
 
-Build
-
-Playground
-
-Model Card"
-
 # --- FUNGSI PEMBANTU (LOGIKA UTAMA TETAP SAMA) ---
 
 @st.cache_data(show_spinner=False)
