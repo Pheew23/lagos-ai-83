@@ -255,12 +255,12 @@ for message in st.session_state.messages:
 # --- 6. KOLOM INPUT UTAMA ---
 prompt = st.chat_input("Tanyakan analisis ke Lagos AI...")
 
-# --- 7. LOGIKA PROSES (VERSI OPTIMASI MEMORI ANTI-RESET) ---
+# --- 7. LOGIKA PROSES (VERSI PERBAIKAN: TANPA DUPLIKAT) ---
 if prompt:
     teks_perintah = prompt.strip()
     konten_payload = []
 
-    # 1. Masukkan gambar ke request SEKARANG saja, jangan disimpan permanen di riwayat chat mendatang
+    # 1. Masukkan gambar ke request SEKARANG saja
     if st.session_state.uploaded_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.uploaded_image)
         konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
@@ -280,10 +280,10 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # SIMPAN KE STATE: Untuk request saat ini, kita kirim multimodal payload lengkap
+    # SIMPAN KE STATE: Kirim multimodal payload lengkap untuk request saat ini
     st.session_state.messages.append({"role": "user", "content": konten_payload})
 
-    # Response Streaming dari Model AI
+    # Response Streaming dari Model AI (Cukup Satu Blok Ini Saja)
     with st.chat_message("assistant"):
         client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
         placeholder = st.empty()
@@ -294,7 +294,7 @@ if prompt:
                 model=MODEL_NAME,
                 messages=st.session_state.messages,
                 temperature=0.7,
-                max_tokens=4096, # Disesuaikan agar aman dari limit token keluaran
+                max_tokens=4096, 
                 stream=True
             )
 
@@ -308,16 +308,18 @@ if prompt:
             placeholder.markdown(full_response)
             
             # --- STRATEGI PENYELAMAT MEMORI ---
-            # Mengubah payload user terakhir dari format base64 gambar yang berat menjadi TEKS SAJA 
-            # agar chat berikutnya tidak menanggung beban gambar lama.
+            # Mengubah payload user terakhir menjadi TEKS SAJA agar chat berikutnya ringan
             st.session_state.messages[-1] = {"role": "user", "content": f"[User menanyakan gambar/dokumen] {prompt}"}
             
-            # Baru masukkan respon AI ke dalam riwayat
+            # Masukkan respon AI ke dalam riwayat
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # Otomatis kosongkan file uploader di UI setelah sukses dianalisis sekali
+            # Otomatis kosongkan file uploader di UI setelah sukses dianalisis
             st.session_state.uploaded_image = None
             st.session_state.uploaded_file = None
+            
+            # Memicu rerun agar tampilan UI pembatalan upload langsung sinkron
+            st.rerun()
 
         except Exception as e:
             st.error(f"Terjadi kesalahan teknis API: {str(e)}")
