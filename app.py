@@ -94,7 +94,7 @@ st.markdown("""
 # --- API KEY YANG DISEMBATKAN ---
 API_KEY = "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"
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "stepfun-ai/step-3.7-flash"
+MODEL_NAME = "openai/gpt-oss-20b"
 
 # --- FUNGSI PEMBANTU (LOGIKA UTAMA TETAP SAMA) ---
 
