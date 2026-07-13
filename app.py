@@ -94,7 +94,7 @@ st.markdown("""
 # --- API KEY YANG DISEMBATKAN ---
 API_KEY = "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"
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "microsoft/phi-4-multimodal-instruct"
+MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512"
 
 # --- FUNGSI PEMBANTU (LOGIKA UTAMA TETAP SAMA) ---
 
