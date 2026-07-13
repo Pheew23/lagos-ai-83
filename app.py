@@ -92,7 +92,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- API KEY YANG DISEMBATKAN ---
-API_KEY = "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"
+API_KEY = "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"
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 MODEL_NAME = "openai/gpt-oss-20b"
 
