@@ -219,7 +219,7 @@ if prompt:
                 model=MODEL_NAME,
                 messages=st.session_state.messages,
                 temperature=0.2,
-                max_tokens=2096,
+                max_tokens=2048,
                 stream=True
             )
 
