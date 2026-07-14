@@ -5,104 +5,58 @@ import re
 import base64
 import requests
 from docx import Document
-from streamlit_lottie import st_lottie # Dipindahkan ke atas
+from streamlit_lottie import st_lottie
 
-# --- FUNGSI ANIMASI LOTTIE (PEMANIS TAMPILAN) ---
-def load_lottieurl(url: str):
-    try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        pass
-    return None
-
-# --- 1. KONFIGURASI HALAMAN & TEMA ---
+# --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="Lagos AI 9.1 | Premium Workspace",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Lagos AI | Chat Interface",
+    page_icon="✨",
+    layout="centered", # Menggunakan centered agar chatbox tidak terlalu melebar (seperti Gemini)
+    initial_sidebar_state="collapsed" # Sidebar disembunyikan secara default agar lebih bersih
 )
 
-# --- INJEKSI CUSTOM CSS UNTUK DARK & LIGHT MODE ELEGAN ---
+# --- 2. CUSTOM CSS (GAYA CLEAN & MINIMALIS) ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
-        /* Font Global */
+        /* Font & Background meniru gaya modern yang bersih */
         html, body, [class*="css"] {
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
         }
 
-        /* Judul Gradasi Neon Modern */
-        .main-title {
-            font-size: 2.8rem;
-            font-weight: 700;
-            background: linear-gradient(90deg, #7d4eff, #00d2ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0rem;
+        /* Menyembunyikan elemen default Streamlit yang mengganggu */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        /* Mempercantik bubble chat AI agar lebih soft */
+        .stChatMessage:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.03) !important;
+            border-radius: 12px;
+            padding: 1rem;
         }
-
-        .subtitle {
-            font-size: 1.1rem;
-            color: #888888;
-            margin-bottom: 2rem;
-            font-weight: 300;
-        }
-
-        /* Glassmorphism Panel untuk Kotak Input/Upload */
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
+        
+        /* Pill indikator file yang diunggah */
+        .file-pill {
+            display: inline-block;
+            background: rgba(125, 78, 255, 0.2);
+            color: #b59bf5;
+            padding: 4px 12px;
             border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            font-size: 0.8rem;
+            margin-right: 8px;
             margin-bottom: 15px;
-        }
-
-        /* Customisasi Tombol Utama Premium */
-        div.stButton > button:first-child {
-            background: linear-gradient(90deg, #7d4eff, #5a32d6);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            padding: 12px 24px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(125, 78, 255, 0.25);
-        }
-        div.stButton > button:first-child:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(125, 78, 255, 0.45);
-            background: linear-gradient(90deg, #8e5bff, #6b42e6);
-        }
-
-        /* Penyesuaian Komponen Chat Agar Lebih Kontras di Dua Mode */
-        .stChatMessage {
-            background-color: rgba(255, 255, 255, 0.02) !important;
-            border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            border-radius: 12px !important;
-            margin-bottom: 10px;
-            padding: 15px !important;
+            border: 1px solid rgba(125, 78, 255, 0.4);
         }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# --- KONFIGURASI API (DIAMANKAN) ---
-# Gunakan st.secrets untuk deployment. Buat file .streamlit/secrets.toml di lokal.
-# Karena memakai library OpenAI, ini sangat mudah dialihkan (swap) ke Groq API 
-# di masa depan untuk menekan latensi jika pengguna aktif harian sudah tinggi.
-
-API_KEY = st.secrets.get("API_KEY", "GANTI_DENGAN_API_KEY_ANDA") 
-BASE_URL = "https://integrate.api.nvidia.com/v1" # Atau ganti ke https://api.groq.com/openai/v1
-MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512" 
+# --- KONFIGURASI API ---
+API_KEY = "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" # Pindahkan ke st.secrets saat rilis
+BASE_URL = "https://integrate.api.nvidia.com/v1"
+MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512"
 
 # --- FUNGSI PEMBANTU ---
-
 @st.cache_data(show_spinner=False)
 def konversi_gambar_ke_base64(uploaded_file):
     if uploaded_file is not None:
@@ -124,172 +78,132 @@ def ekstrak_teks_dari_dokumen(uploaded_file):
             teks_hasil = uploaded_file.read().decode("utf-8")
         return teks_hasil.strip()
     except Exception as e:
-        st.error(f"Gagal membaca dokumen: {str(e)}")
         return ""
 
 def buat_file_word(riwayat_pesan):
     doc = Document()
-    doc.add_heading('Lagos AI - Laporan Analisis', 0)
+    doc.add_heading('Lagos AI - Chat Export', 0)
     for msg in riwayat_pesan:
         if msg["role"] == "system": continue
-        role_title = "User" if msg["role"] == "user" else "AI Assistant"
+        role_title = "User" if msg["role"] == "user" else "Lagos AI"
         doc.add_heading(f"{role_title}", level=2)
         content = msg["content"]
         text_content = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
         
-        lines = text_content.split('\n')
-        for line in lines:
+        for line in text_content.split('\n'):
             line = line.strip()
             if not line: continue
             if line.startswith('# '): doc.add_heading(line[2:], 3)
             elif line.startswith('- '): doc.add_paragraph(line[2:], style='List Bullet')
-            elif re.match(r'^\d+\.\s', line): doc.add_paragraph(line[3:], style='List Number')
             else: doc.add_paragraph(line)
-        doc.add_paragraph("\n" + "_"*50)
-
+        doc.add_paragraph("\n" + "_"*40 + "\n")
     bio = io.BytesIO()
     doc.save(bio)
     bio.seek(0)
     return bio
 
-# --- POP-UP MODAL UNDUH LAPORAN ---
-@st.dialog("🔮 Unduh Laporan Lagos AI")
-def tampilkan_popup_unduh(buffer):
-    st.success("🎉 Berkas laporan berbasis teks berhasil dirangkum secara otomatis!")
-    st.write("Klik tombol premium di bawah ini untuk menyimpan dokumen kerja Anda ke perangkat komputer.")
-    st.divider()
-    st.download_button(
-        label="📥 DOWNLOAD SEKARANG (.DOCX)",
-        data=buffer,
-        file_name="Lagos_AI_Report.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
-
-# --- SIDEBAR: INFO & RESET ---
-with st.sidebar:
-    anim_sidebar = load_lottieurl("https://lottie.host/80e98031-6453-48b4-bb50-bf654c6ee1ff/t3Kx56jU2W.json")
-    if anim_sidebar:
-        st_lottie(anim_sidebar, height=120)
-
-    st.markdown("### ⚙️ Engine Status")
-    st.success(f"🤖 {MODEL_NAME}")
-    
-    st.divider()
-    st.markdown("### 📥 Menu Aksi")
-    
-    # Tombol Ekspor Rangkuman Obrolan
-    if "messages" in st.session_state and len(st.session_state.messages) > 1:
-        if st.button("📝 Susun Laporan Ekspor", type="primary", use_container_width=True):
-            with st.spinner("Merangkum berkas..."):
-                file_word = buat_file_word(st.session_state.messages)
-                tampilkan_popup_unduh(file_word)
-    else:
-        st.info("Ketik obrolan terlebih dahulu untuk membuka menu unduh laporan.")
-
-    st.divider()
-    if st.button("🗑️ Bersihkan Memori Chat", type="secondary", use_container_width=True):
-        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (rian dev), asisten analitik tingkat tinggi. Berikan jawaban cerdas, mendalam, dan terstruktur dalam Bahasa Indonesia."}]
-        st.session_state.uploaded_file = None
-        st.session_state.uploaded_image = None
-        st.rerun()
-
-    # (Opsional) Placeholder untuk tata letak Monetisasi/Ads jika aplikasi dirilis publik
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.caption("Ad Space (Sponsor)")
-    st.markdown('<div style="background-color:rgba(255,255,255,0.05); height:100px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#888;">Ruang Iklan Anda</div>', unsafe_allow_html=True)
-
-# --- 2. INISIALISASI SESSION STATE ---
+# --- 3. INISIALISASI SESSION STATE ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": "Anda adalah Lagos AI 9.1 (rian dev), asisten analitik tingkat tinggi. Berikan jawaban cerdas, mendalam, dan terstruktur dalam Bahasa Indonesia."}
-    ]
-if "uploaded_file" not in st.session_state:
-    st.session_state.uploaded_file = None
-if "uploaded_image" not in st.session_state:
-    st.session_state.uploaded_image = None
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah asisten AI yang cerdas dan terstruktur."}]
+if "temp_image" not in st.session_state:
+    st.session_state.temp_image = None
+if "temp_doc" not in st.session_state:
+    st.session_state.temp_doc = None
 
-# --- 3. TAMPILAN UTAMA ---
-st.markdown('<div class="main-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Analisis Multimodal Cerdas: Gambar, Dokumen & Konteks</div>', unsafe_allow_html=True)
-
-# --- 4. PANEL UNGGAH BERKAS MULTIMODAL ---
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-c_upload1, c_upload2 = st.columns(2)
-
-with c_upload1:
-    st.markdown("🔒 **Lampirkan Objek Gambar**")
-    # Pipeline pra-pemrosesan (seperti peningkatan kejernihan/resolusi ke skala tinggi) 
-    # bisa dipanggil di sini sebelum gambar di-encode.
-    uploaded_image = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed", key="img_up")
-    if uploaded_image: st.session_state.uploaded_image = uploaded_image
-
-with c_upload2:
-    st.markdown("📁 **Lampirkan Dokumen Referensi**")
-    uploaded_file = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key="doc_up")
-    if uploaded_file: st.session_state.uploaded_file = uploaded_file
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Tampilan Status Unggahan (Preview Mini)
-if st.session_state.uploaded_image or st.session_state.uploaded_file:
-    c_prev1, c_prev2 = st.columns(2)
-    with c_prev1:
-        if st.session_state.uploaded_image:
-            st.image(st.session_state.uploaded_image, caption="📷 Gambar Aktif", width=120)
-            if st.button("🗑️ Hapus Gambar", key="del_img"):
-                st.session_state.uploaded_image = None
-                st.rerun()
-    with c_prev2:
-        if st.session_state.uploaded_file:
-            st.success(f"📄 {st.session_state.uploaded_file.name}")
-            if st.button("🗑️ Hapus Dokumen", key="del_doc"):
-                st.session_state.uploaded_file = None
-                st.rerun()
-
-st.divider()
-
-# --- 5. TAMPILAN RIWAYAT CHAT ---
-for message in st.session_state.messages:
-    if message["role"] == "system":
-        continue
+# --- SIDEBAR (UNTUK FITUR EKSPOR & IKLAN) ---
+with st.sidebar:
+    st.markdown("### ⚙️ Lagos AI Settings")
+    if st.button("🗑️ Chat Baru", use_container_width=True):
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah asisten AI yang cerdas dan terstruktur."}]
+        st.rerun()
     
+    st.divider()
+    if len(st.session_state.messages) > 1:
+        file_word = buat_file_word(st.session_state.messages)
+        st.download_button(
+            label="📥 Ekspor Obrolan (.DOCX)",
+            data=file_word,
+            file_name="Lagos_AI_Export.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+    
+    # Ruang Iklan Sidebar (Tidak mengganggu chat utama)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.caption("Sponsored")
+    st.markdown('<div style="background:rgba(255,255,255,0.05); height:150px; border-radius:8px; display:flex; align-items:center; justify-content:center; border:1px dashed #555;">[Ad Space]</div>', unsafe_allow_html=True)
+
+# --- 4. AREA OBROLAN UTAMA ---
+# Header sapaan jika chat masih kosong
+if len(st.session_state.messages) == 1:
+    st.markdown("<h1 style='text-align: center; margin-top: 10vh; font-weight: 600; background: -webkit-linear-gradient(45deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Halo, ada yang bisa saya bantu hari ini?</h1>", unsafe_allow_html=True)
+
+# Render Riwayat Chat
+for message in st.session_state.messages:
+    if message["role"] == "system": continue
     with st.chat_message(message["role"]):
         content = message["content"]
-        if isinstance(content, list):
-            text_disp = next((item["text"] for item in content if item["type"] == "text"), "")
-            st.markdown(text_disp)
-        else:
-            st.markdown(content)
+        text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+        st.markdown(text_disp)
 
-# --- 6. KOLOM INPUT UTAMA ---
-prompt = st.chat_input("Tanyakan analisis ke Lagos AI...")
+# Spasi kosong agar input tidak menutupi chat terakhir
+st.markdown("<div style='height: 80px'></div>", unsafe_allow_html=True)
 
-# --- 7. LOGIKA PROSES (SUDAH DIPERBAIKI: HANYA SATU BLOK STREAMING) ---
+# --- 5. AREA INPUT TERPADU (BOTTOM ANCHORED) ---
+# Menggunakan container untuk merapikan tombol lampiran dan kolom input
+input_container = st.container()
+
+with input_container:
+    # Menampilkan indikator jika ada file yang siap dikirim
+    if st.session_state.temp_image:
+        st.markdown(f"<div class='file-pill'>📷 Gambar siap dilampirkan</div>", unsafe_allow_html=True)
+    if st.session_state.temp_doc:
+        st.markdown(f"<div class='file-pill'>📄 Dokumen siap dilampirkan</div>", unsafe_allow_html=True)
+
+    # Baris yang memuat tombol lampiran (Popover) dan kolom obrolan
+    col_attach, col_input = st.columns([1, 10])
+    
+    with col_attach:
+        # Tombol Popover gaya Gemini untuk Attachments
+        with st.popover("📎"):
+            st.markdown("**Lampirkan File**")
+            up_img = st.file_uploader("Gambar", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+            up_doc = st.file_uploader("Dokumen", type=["pdf", "txt"], label_visibility="collapsed")
+            
+            if up_img: st.session_state.temp_image = up_img
+            if up_doc: st.session_state.temp_doc = up_doc
+
+    with col_input:
+        prompt = st.chat_input("Tanya Lagos AI atau instruksikan file lampiran...")
+
+# --- 6. LOGIKA PEMROSESAN UTAMA ---
 if prompt:
-    teks_perintah = prompt.strip()
+    # Siapkan payload
     konten_payload = []
-
-    if st.session_state.uploaded_image:
-        base64_img = konversi_gambar_ke_base64(st.session_state.uploaded_image)
+    
+    if st.session_state.temp_image:
+        base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
         konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
-
+    
     teks_dokumen = ""
-    if st.session_state.uploaded_file:
-        with st.spinner("Membaca dokumen teks..."):
-            teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.uploaded_file)
+    if st.session_state.temp_doc:
+        with st.spinner("Membaca dokumen..."):
+            teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
         if teks_dokumen:
-            teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.uploaded_file.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
+            teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
 
-    final_prompt = teks_dokumen + teks_perintah
+    final_prompt = teks_dokumen + prompt
     konten_payload.append({"type": "text", "text": final_prompt})
 
+    # Tampilkan prompt pengguna di UI
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Simpan ke riwayat
     st.session_state.messages.append({"role": "user", "content": konten_payload})
 
+    # Proses AI
     with st.chat_message("assistant"):
-        # Pastikan API key ditarik dengan benar
         client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
         placeholder = st.empty()
         full_response = ""
@@ -299,7 +213,7 @@ if prompt:
                 model=MODEL_NAME,
                 messages=st.session_state.messages,
                 temperature=0.2,
-                max_tokens=2096, 
+                max_tokens=2096,
                 stream=True
             )
 
@@ -312,17 +226,17 @@ if prompt:
 
             placeholder.markdown(full_response)
             
-            # Strategi Penyelamatan Memori & State Management
-            st.session_state.messages[-1] = {"role": "user", "content": f"[User menanyakan gambar/dokumen] {prompt}"}
+            # Hemat memori: Ubah riwayat pengguna menjadi teks saja setelah diproses
+            st.session_state.messages[-1] = {"role": "user", "content": prompt}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # Otomatis kosongkan antarmuka
-            st.session_state.uploaded_image = None
-            st.session_state.uploaded_file = None
+            # Bersihkan cache file setelah berhasil dikirim
+            st.session_state.temp_image = None
+            st.session_state.temp_doc = None
             
             st.rerun()
 
         except Exception as e:
-            st.error(f"Terjadi kesalahan teknis API: {str(e)}")
-            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+            st.error(f"Kesalahan koneksi AI: {str(e)}")
+            if st.session_state.messages[-1]["role"] == "user":
                 st.session_state.messages.pop()
