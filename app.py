@@ -94,7 +94,7 @@ st.markdown("""
 # --- API KEY YANG DISEMBATKAN ---
 API_KEY = "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"
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "minimaxai/minimax-m3"
+MODEL_NAME = "minimaxai/minimax-m2.7"
 
 # --- FUNGSI PEMBANTU (LOGIKA UTAMA TETAP SAMA) ---
 
