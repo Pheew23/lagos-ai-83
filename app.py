@@ -5,8 +5,9 @@ import re
 import base64
 import requests
 from docx import Document
+from streamlit_lottie import st_lottie # Dipindahkan ke atas
 
-# --- FUNGSI ANIMASI LOTTIE (PEMALIS TAMPILAN) ---
+# --- FUNGSI ANIMASI LOTTIE (PEMANIS TAMPILAN) ---
 def load_lottieurl(url: str):
     try:
         r = requests.get(url, timeout=5)
@@ -91,12 +92,16 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- API KEY YANG DISEMBATKAN ---
-API_KEY = "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"
-BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512"
+# --- KONFIGURASI API (DIAMANKAN) ---
+# Gunakan st.secrets untuk deployment. Buat file .streamlit/secrets.toml di lokal.
+# Karena memakai library OpenAI, ini sangat mudah dialihkan (swap) ke Groq API 
+# di masa depan untuk menekan latensi jika pengguna aktif harian sudah tinggi.
 
-# --- FUNGSI PEMBANTU (LOGIKA UTAMA TETAP SAMA) ---
+API_KEY = st.secrets.get("API_KEY", "GANTI_DENGAN_API_KEY_ANDA") 
+BASE_URL = "https://integrate.api.nvidia.com/v1" # Atau ganti ke https://api.groq.com/openai/v1
+MODEL_NAME = "mistralai/mistral-large-3-675b-instruct-2512" 
+
+# --- FUNGSI PEMBANTU ---
 
 @st.cache_data(show_spinner=False)
 def konversi_gambar_ke_base64(uploaded_file):
@@ -109,7 +114,6 @@ def ekstrak_teks_dari_dokumen(uploaded_file):
     teks_hasil = ""
     nama_file = uploaded_file.name.lower()
     try:
-        # Jika user menggunakan library PdfReader (pastikan pypdf terinstal jika pakai PDF)
         if nama_file.endswith('.pdf'):
             from pypdf import PdfReader
             reader = PdfReader(uploaded_file)
@@ -164,8 +168,6 @@ def tampilkan_popup_unduh(buffer):
 
 # --- SIDEBAR: INFO & RESET ---
 with st.sidebar:
-    # Memuat animasi Lottie pemanis di Sidebar
-    from streamlit_lottie import st_lottie
     anim_sidebar = load_lottieurl("https://lottie.host/80e98031-6453-48b4-bb50-bf654c6ee1ff/t3Kx56jU2W.json")
     if anim_sidebar:
         st_lottie(anim_sidebar, height=120)
@@ -192,6 +194,11 @@ with st.sidebar:
         st.session_state.uploaded_image = None
         st.rerun()
 
+    # (Opsional) Placeholder untuk tata letak Monetisasi/Ads jika aplikasi dirilis publik
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.caption("Ad Space (Sponsor)")
+    st.markdown('<div style="background-color:rgba(255,255,255,0.05); height:100px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#888;">Ruang Iklan Anda</div>', unsafe_allow_html=True)
+
 # --- 2. INISIALISASI SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -206,12 +213,14 @@ if "uploaded_image" not in st.session_state:
 st.markdown('<div class="main-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Analisis Multimodal Cerdas: Gambar, Dokumen & Konteks</div>', unsafe_allow_html=True)
 
-# --- 4. PANEL UNGGUH BERKAS MULTIMODAL ---
+# --- 4. PANEL UNGGAH BERKAS MULTIMODAL ---
 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 c_upload1, c_upload2 = st.columns(2)
 
 with c_upload1:
     st.markdown("🔒 **Lampirkan Objek Gambar**")
+    # Pipeline pra-pemrosesan (seperti peningkatan kejernihan/resolusi ke skala tinggi) 
+    # bisa dipanggil di sini sebelum gambar di-encode.
     uploaded_image = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed", key="img_up")
     if uploaded_image: st.session_state.uploaded_image = uploaded_image
 
@@ -239,7 +248,7 @@ if st.session_state.uploaded_image or st.session_state.uploaded_file:
 
 st.divider()
 
-# --- 5. TAMPILAN RIWAYAT CHAT (MENGGUNAKAN ELEMEN BAWAAN YANG RESPONSIF TEMA) ---
+# --- 5. TAMPILAN RIWAYAT CHAT ---
 for message in st.session_state.messages:
     if message["role"] == "system":
         continue
@@ -255,17 +264,15 @@ for message in st.session_state.messages:
 # --- 6. KOLOM INPUT UTAMA ---
 prompt = st.chat_input("Tanyakan analisis ke Lagos AI...")
 
-# --- 7. LOGIKA PROSES (VERSI PERBAIKAN: TANPA DUPLIKAT) ---
+# --- 7. LOGIKA PROSES (SUDAH DIPERBAIKI: HANYA SATU BLOK STREAMING) ---
 if prompt:
     teks_perintah = prompt.strip()
     konten_payload = []
 
-    # 1. Masukkan gambar ke request SEKARANG saja
     if st.session_state.uploaded_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.uploaded_image)
         konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
 
-    # 2. Masukkan konten dokumen jika ada
     teks_dokumen = ""
     if st.session_state.uploaded_file:
         with st.spinner("Membaca dokumen teks..."):
@@ -276,15 +283,13 @@ if prompt:
     final_prompt = teks_dokumen + teks_perintah
     konten_payload.append({"type": "text", "text": final_prompt})
 
-    # Tampilkan ke UI user
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # SIMPAN KE STATE: Kirim multimodal payload lengkap untuk request saat ini
     st.session_state.messages.append({"role": "user", "content": konten_payload})
 
-    # Response Streaming dari Model AI (Cukup Satu Blok Ini Saja)
     with st.chat_message("assistant"):
+        # Pastikan API key ditarik dengan benar
         client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
         placeholder = st.empty()
         full_response = ""
@@ -307,50 +312,17 @@ if prompt:
 
             placeholder.markdown(full_response)
             
-            # --- STRATEGI PENYELAMAT MEMORI ---
-            # Mengubah payload user terakhir menjadi TEKS SAJA agar chat berikutnya ringan
+            # Strategi Penyelamatan Memori & State Management
             st.session_state.messages[-1] = {"role": "user", "content": f"[User menanyakan gambar/dokumen] {prompt}"}
-            
-            # Masukkan respon AI ke dalam riwayat
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # Otomatis kosongkan file uploader di UI setelah sukses dianalisis
+            # Otomatis kosongkan antarmuka
             st.session_state.uploaded_image = None
             st.session_state.uploaded_file = None
             
-            # Memicu rerun agar tampilan UI pembatalan upload langsung sinkron
             st.rerun()
 
         except Exception as e:
             st.error(f"Terjadi kesalahan teknis API: {str(e)}")
-            # Jika error, hapus input terakhir agar tidak merusak state
-            if st.session_state.messages[-1]["role"] == "user":
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
                 st.session_state.messages.pop()
-
-    # Response Streaming dari Model AI
-    with st.chat_message("assistant"):
-        client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
-        placeholder = st.empty()
-        full_response = ""
-
-        try:
-            response_stream = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=st.session_state.messages,
-                temperature=0.2,
-                max_tokens=2096,
-                stream=True
-            )
-
-            for chunk in response_stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full_response += delta
-                        placeholder.markdown(full_response + "▌")
-
-            placeholder.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-        except Exception as e:
-            st.error(f"Terjadi kesalahan teknis: {str(e)}")
