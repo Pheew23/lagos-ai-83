@@ -68,7 +68,7 @@ st.markdown("""
 # --- KONFIGURASI API ---
 API_KEY = "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" # Pindahkan ke st.secrets saat rilis produksi
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "llama-guard-4-12b"
+MODEL_NAME = "mistralai/mistral-small-4-119b-2603"
 
 # --- FUNGSI PEMBANTU ---
 @st.cache_data(show_spinner=False)
