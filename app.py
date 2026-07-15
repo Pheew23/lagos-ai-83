@@ -66,7 +66,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- KONFIGURASI API ---
-API_KEY = "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" # Pindahkan ke st.secrets saat rilis produksi
+# Mengambil API Key secara aman dari st.secrets
+API_KEY = st.secrets["NVIDIA_API_KEY"] 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 # --- FUNGSI PEMBANTU ---
