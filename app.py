@@ -233,7 +233,7 @@ if prompt:
                 model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox
                 messages=st.session_state.messages,
                 temperature=0.2,
-                max_tokens=2048,
+                max_tokens=4096,
                 stream=True
             )
 
