@@ -134,16 +134,21 @@ with st.sidebar:
     
     # Komponen Pemilihan Model AI
     st.markdown("### 🧠 Pilih Model AI")
+    
+    # Mapping nama singkat untuk UI ke ID asli untuk API
+    MODEL_MAPPING = {
+        "minimaxai/minimax-m3": "1. Video",
+        "mistralai/mistral-small-4-119b-2603": "2. Cepat",
+        "mistralai/mistral-medium-3.5-128b": "3. Bisnis",
+        "openai/gpt-oss-120b": "4. Alat",
+        "nvidia/nemotron-3-ultra-550b-a55b": "5. Agen"
+    }
+    
     MODEL_NAME = st.selectbox(
         label="Pilih model aktif:",
-        options=[
-            "minimaxai/minimax-m3",
-            "mistralai/mistral-small-4-119b-2603",
-            "mistralai/mistral-medium-3.5-128b",
-            "openai/gpt-oss-120b",
-            "nvidia/nemotron-3-ultra-550b-a55b"
-        ],
-        index=1, # Default ke mistral-small-4-119b-2603 sesuai kode awal Anda
+        options=list(MODEL_MAPPING.keys()),
+        index=1, # Default ke mistral-small-4-119b-2603
+        format_func=lambda x: MODEL_MAPPING[x], # Merubah visual teks menjadi nama singkat saja
         label_visibility="collapsed"
     )
     
@@ -230,7 +235,7 @@ if prompt:
 
         try:
             response_stream = client.chat.completions.create(
-                model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox
+                model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox (Nilai string aslinya otomatis terjaga)
                 messages=st.session_state.messages,
                 temperature=0.2,
                 max_tokens=4096,
