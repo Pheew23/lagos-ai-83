@@ -68,7 +68,6 @@ st.markdown("""
 # --- KONFIGURASI API ---
 API_KEY = "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" # Pindahkan ke st.secrets saat rilis produksi
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-MODEL_NAME = "mistralai/mistral-small-4-119b-2603"
 
 # --- FUNGSI PEMBANTU ---
 @st.cache_data(show_spinner=False)
@@ -132,6 +131,21 @@ st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', u
 with st.sidebar:
     st.markdown("### ⚙️ Engine Status")
     st.success("🤖 Lagos AI 9.1 Active")
+    
+    # Komponen Pemilihan Model AI
+    st.markdown("### 🧠 Pilih Model AI")
+    MODEL_NAME = st.selectbox(
+        label="Pilih model aktif:",
+        options=[
+            "minimaxai/minimax-m3",
+            "mistralai/mistral-small-4-119b-2603",
+            "mistralai/mistral-medium-3.5-128b",
+            "openai/gpt-oss-120b",
+            "nvidia/nemotron-3-ultra-550b-a55b"
+        ],
+        index=1, # Default ke mistral-small-4-119b-2603 sesuai kode awal Anda
+        label_visibility="collapsed"
+    )
     
     st.divider()
     if st.button("🗑️ Bersihkan Memori Chat", type="secondary", use_container_width=True):
@@ -216,7 +230,7 @@ if prompt:
 
         try:
             response_stream = client.chat.completions.create(
-                model=MODEL_NAME,
+                model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox
                 messages=st.session_state.messages,
                 temperature=0.2,
                 max_tokens=2048,
