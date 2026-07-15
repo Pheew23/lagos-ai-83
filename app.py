@@ -117,7 +117,7 @@ def buat_file_word(riwayat_pesan):
 
 # --- 3. INISIALISASI SESSION STATE ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1, asisten analitik tingkat tinggi."}]
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
 if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
@@ -149,7 +149,7 @@ with st.sidebar:
     
     st.divider()
     if st.button("🗑️ Bersihkan Memori Chat", type="secondary", use_container_width=True):
-        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1, asisten analitik tingkat tinggi."}]
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
     
     if len(st.session_state.messages) > 1:
