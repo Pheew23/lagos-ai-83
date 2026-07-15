@@ -238,7 +238,7 @@ if prompt:
             response_stream = client.chat.completions.create(
                 model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox (Nilai string aslinya otomatis terjaga)
                 messages=st.session_state.messages,
-                temperature=0.2,
+                temperature=0.4,
                 max_tokens=4096,
                 stream=True
             )
