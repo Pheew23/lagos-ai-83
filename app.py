@@ -138,7 +138,7 @@ with st.sidebar:
     
     # Mapping nama singkat untuk UI ke ID asli untuk API
     MODEL_MAPPING = {
-        "moonshotai/kimi-k2.6": "1. Buat dan edit gambar",
+        "moonshotai/kimi-k2.6": "1. Stabil",
         "thinkingmachines/inkling": "2. Cepat",
         "mistralai/mistral-medium-3.5-128b": "3. Bisnis",
         "openai/gpt-oss-120b": "4. Alat",
