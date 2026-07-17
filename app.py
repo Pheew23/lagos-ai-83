@@ -138,7 +138,7 @@ with st.sidebar:
     
     # Mapping nama singkat untuk UI ke ID asli untuk API
     MODEL_MAPPING = {
-        "poolside/laguna-xs-2.1": "1. Video",
+        "flux.2-klein-4b": "1. Buat dan edit gambar",
         "thinkingmachines/inkling": "2. Cepat",
         "mistralai/mistral-medium-3.5-128b": "3. Bisnis",
         "openai/gpt-oss-120b": "4. Alat",
