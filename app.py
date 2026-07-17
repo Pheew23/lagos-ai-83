@@ -138,7 +138,7 @@ with st.sidebar:
     
     # Mapping nama singkat untuk UI ke ID asli untuk API
     MODEL_MAPPING = {
-        "minimaxai/minimax-m3": "1. Video",
+        "thinkingmachines/inkling": "1. Video",
         "mistralai/mistral-small-4-119b-2603": "2. Cepat",
         "mistralai/mistral-medium-3.5-128b": "3. Bisnis",
         "openai/gpt-oss-120b": "4. Alat",
