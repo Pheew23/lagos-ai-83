@@ -165,10 +165,11 @@ with st.sidebar:
     
     st.markdown("### 🧠 Pilih Model AI")
     MODEL_MAPPING = {
-        "meta/llama-3.2-90b-vision-instruct": "1. Vision Pro (Gambar & Teks)",
-        "meta/llama-3.2-11b-vision-instruct": "2. Vision Cepat (Gambar & Teks)",
-        "google/gemma-2-27b-it": "3. Cepat (Khusus Teks)",
-        "meta/llama-3.1-70b-instruct": "4. Analisis (Khusus Teks)"
+        "google/gemma-4-31b-it": "1. Stabil",
+        "thinkingmachines/inkling": "2. Cepat(text only)",
+        "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
+        "openai/gpt-oss-120b": "4. Sangat Cepat(text only)",
+        "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
     
     MODEL_NAME = st.selectbox(
