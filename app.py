@@ -142,9 +142,9 @@ with st.sidebar:
     # Mapping nama singkat untuk UI ke ID asli untuk API
     MODEL_MAPPING = {
         "google/gemma-4-31b-it": "1. Stabil",
-        "thinkingmachines/inkling": "2. Cepat",
+        "thinkingmachines/inkling": "2. Cepat(text only)",
         "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
-        "openai/gpt-oss-120b": "4. Sangat Cepat",
+        "openai/gpt-oss-120b": "4. Sangat Cepat(text only",
         "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
     
