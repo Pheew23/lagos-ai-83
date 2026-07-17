@@ -5,6 +5,8 @@ import re
 import base64
 import requests
 from docx import Document
+from audio_recorder_streamlit import audio_recorder
+import speech_recognition as sr
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -62,11 +64,19 @@ st.markdown("""
             margin-bottom: 12px;
             border: 1px solid rgba(125, 78, 255, 0.3);
         }
+
+        /* Styling ala Gemini untuk area action (Attachment & Voice) */
+        .action-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: -15px;
+            padding-left: 10px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
 # --- KONFIGURASI API ---
-# Mengambil API Key secara aman dari st.secrets
+# Pastikan Anda sudah mengatur NVIDIA_API_KEY di Streamlit Secrets
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
@@ -123,36 +133,33 @@ if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
     st.session_state.temp_doc = None
-# TAMBAHAN: Key dinamis untuk me-reset file uploader secara total
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- BRANDING UTAMA (SELALU TAMPIL DI ATAS) ---
+# --- BRANDING UTAMA ---
 st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
-# --- SIDEBAR (TANPA IKLAN, MURNI UTILITIES) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### ⚙️ Engine Status")
     st.success("🤖 Lagos AI 9.1 Active")
     
-    # Komponen Pemilihan Model AI
     st.markdown("### 🧠 Pilih Model AI")
-    
-    # Mapping nama singkat untuk UI ke ID asli untuk API
+    # Pastikan model di bawah ini adalah model yang valid dari NVIDIA NIM
+    # Gunakan model berlabel Vision agar fitur unggah gambar berfungsi
     MODEL_MAPPING = {
-        "google/gemma-4-31b-it": "1. Stabil",
-        "thinkingmachines/inkling": "2. Cepat(text only)",
-        "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
-        "openai/gpt-oss-120b": "4. Sangat Cepat(text only)",
-        "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
+        "meta/llama-3.2-90b-vision-instruct": "1. Vision Pro (Gambar & Teks)",
+        "meta/llama-3.2-11b-vision-instruct": "2. Vision Cepat (Gambar & Teks)",
+        "google/gemma-2-27b-it": "3. Cepat (Khusus Teks)",
+        "meta/llama-3.1-70b-instruct": "4. Analisis (Khusus Teks)"
     }
     
     MODEL_NAME = st.selectbox(
         label="Pilih model aktif:",
         options=list(MODEL_MAPPING.keys()),
-        index=1, # Default ke mistral-small-4-119b-2603
-        format_func=lambda x: MODEL_MAPPING[x], # Merubah visual teks menjadi nama singkat saja
+        index=0,
+        format_func=lambda x: MODEL_MAPPING[x],
         label_visibility="collapsed"
     )
     
@@ -173,9 +180,8 @@ with st.sidebar:
         )
 
 # --- 4. AREA OBROLAN UTAMA ---
-# Pesan selamat datang yang elegan jika baru memulai
 if len(st.session_state.messages) == 1:
-    st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau ketik pertanyaan Anda di bawah.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
 for message in st.session_state.messages:
     if message["role"] == "system": continue
@@ -184,13 +190,12 @@ for message in st.session_state.messages:
         text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
         st.markdown(text_disp)
 
-st.markdown("<div style='height: 80px'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 100px'></div>", unsafe_allow_html=True)
 
-# --- 5. AREA INPUT TERPADU ---
+# --- 5. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
 input_container = st.container()
 
 with input_container:
-    # Membaca status widget secara *real-time* menggunakan dynamic key
     current_img = st.session_state.get(f"img_{st.session_state.uploader_key}")
     current_doc = st.session_state.get(f"doc_{st.session_state.uploader_key}")
 
@@ -199,25 +204,49 @@ with input_container:
     if current_doc:
         st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    col_attach, col_input = st.columns([1, 10])
+    st.markdown('<div class="action-container">', unsafe_allow_html=True)
+    col_tools1, col_tools2, _ = st.columns([1, 1, 8])
     
-    with col_attach:
+    with col_tools1:
         with st.popover("📎"):
-            st.markdown("**Lampirkan File**")
-            # Menambahkan parameter 'key' dinamis
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
-            
-            # Tanpa 'if', langsung timpa nilainya. Jika di-X (None), maka temp_image ikut jadi None
             st.session_state.temp_image = up_img
             st.session_state.temp_doc = up_doc
 
-    with col_input:
-        prompt = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
+    with col_tools2:
+        audio_bytes = audio_recorder(
+            text="", 
+            recording_color="#e83a3a", 
+            neutral_color="#888888", 
+            icon_name="microphone", 
+            icon_size="1.5x",
+            key=f"mic_{st.session_state.uploader_key}"
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# ... (Kode bagian 1 sampai 5 tetap sama) ...
+    prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
 
-# --- 6. LOGIKA PEMROSESAN ---
+# --- 6. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
+prompt = prompt_text
+
+# Cek jika ada audio masuk dan tidak ada ketikan manual
+if audio_bytes and not prompt_text:
+    with st.spinner("Menerjemahkan suara..."):
+        r = sr.Recognizer()
+        try:
+            with io.BytesIO(audio_bytes) as source_bytes:
+                with sr.AudioFile(source_bytes) as source:
+                    audio_data = r.record(source)
+                    prompt = r.recognize_google(audio_data, language="id-ID")
+        except sr.UnknownValueError:
+            st.warning("Suara tidak terdengar jelas. Silakan coba lagi.")
+            prompt = None
+        except Exception as e:
+            st.error(f"Sistem gagal memproses suara: {e}")
+            prompt = None
+
+# Lanjut ke proses model utama
 if prompt:
     teks_dokumen = ""
     if st.session_state.temp_doc:
@@ -228,7 +257,6 @@ if prompt:
 
     final_prompt = teks_dokumen + prompt
 
-    # PERBAIKAN: Bedakan format payload untuk teks biasa vs multimodal (gambar)
     if st.session_state.temp_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
         konten_payload = [
@@ -236,7 +264,6 @@ if prompt:
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
         ]
     else:
-        # Kirim sebagai teks String biasa jika tidak ada gambar
         konten_payload = final_prompt 
 
     with st.chat_message("user"):
@@ -267,14 +294,13 @@ if prompt:
 
             placeholder.markdown(full_response)
             
-            # Format ulang log chat user menjadi String standar di riwayat setelah diproses
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # PERBAIKAN: Bersihkan memori dan reset file uploader widget
+            # Bersihkan uploader gambar dan audio
             st.session_state.temp_image = None
             st.session_state.temp_doc = None
-            st.session_state.uploader_key += 1 # Mengganti ID widget agar benar-benar kosong
+            st.session_state.uploader_key += 1 
             
             st.rerun()
 
