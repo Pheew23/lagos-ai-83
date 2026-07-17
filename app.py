@@ -138,11 +138,11 @@ with st.sidebar:
     
     # Mapping nama singkat untuk UI ke ID asli untuk API
     MODEL_MAPPING = {
-        "moonshotai/kimi-k2.6": "1. Stabil",
+        "google/gemma-4-31b-it": "1. Stabil",
         "thinkingmachines/inkling": "2. Cepat",
-        "mistralai/mistral-medium-3.5-128b": "3. Bisnis",
-        "openai/gpt-oss-120b": "4. Alat",
-        "nvidia/nemotron-3-ultra-550b-a55b": "5. Agen"
+        "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
+        "openai/gpt-oss-120b": "4. Sangat Cepat",
+        "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
     
     MODEL_NAME = st.selectbox(
