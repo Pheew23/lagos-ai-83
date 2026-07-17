@@ -65,18 +65,36 @@ st.markdown("""
             border: 1px solid rgba(125, 78, 255, 0.3);
         }
 
-        /* Styling ala Gemini untuk area action (Attachment & Voice) */
-        .action-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: -15px;
-            padding-left: 10px;
+        /* --- UI GEMINI STYLE --- */
+        /* Memastikan elemen kolom (Attach, Teks, Mic) berada lurus di tengah */
+        [data-testid="stHorizontalBlock"] {
+            align-items: center !important;
+        }
+
+        /* Menyulap tombol popover lampiran menjadi bulat minimalis */
+        [data-testid="stPopover"] button {
+            border-radius: 50% !important;
+            height: 48px !important;
+            width: 48px !important;
+            padding: 0 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background-color: transparent !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        [data-testid="stPopover"] button:hover {
+            border-color: #7d4eff !important;
+            background-color: rgba(125, 78, 255, 0.1) !important;
+            color: #7d4eff !important;
+            transform: scale(1.05) !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
 # --- KONFIGURASI API ---
-# Pastikan Anda sudah mengatur NVIDIA_API_KEY di Streamlit Secrets
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
@@ -146,8 +164,6 @@ with st.sidebar:
     st.success("🤖 Lagos AI 9.1 Active")
     
     st.markdown("### 🧠 Pilih Model AI")
-    # Pastikan model di bawah ini adalah model yang valid dari NVIDIA NIM
-    # Gunakan model berlabel Vision agar fitur unggah gambar berfungsi
     MODEL_MAPPING = {
         "meta/llama-3.2-90b-vision-instruct": "1. Vision Pro (Gambar & Teks)",
         "meta/llama-3.2-11b-vision-instruct": "2. Vision Cepat (Gambar & Teks)",
@@ -190,7 +206,7 @@ for message in st.session_state.messages:
         text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
         st.markdown(text_disp)
 
-st.markdown("<div style='height: 100px'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
 # --- 5. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
 input_container = st.container()
@@ -204,28 +220,29 @@ with input_container:
     if current_doc:
         st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="action-container">', unsafe_allow_html=True)
-    col_tools1, col_tools2, _ = st.columns([1, 1, 8])
+    # Membagi antarmuka menjadi 3 kolom sejajar
+    col_attach, col_input, col_mic = st.columns([1, 8, 1])
     
-    with col_tools1:
-        with st.popover("📎"):
+    with col_attach:
+        with st.popover("➕"): # Mengubah icon menjadi plus ala Gemini
+            st.markdown("**Lampirkan File**")
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
             st.session_state.temp_image = up_img
             st.session_state.temp_doc = up_doc
 
-    with col_tools2:
+    with col_input:
+        prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
+
+    with col_mic:
         audio_bytes = audio_recorder(
             text="", 
-            recording_color="#e83a3a", 
+            recording_color="#ff4b4b", # Berubah merah saat merekam
             neutral_color="#888888", 
             icon_name="microphone", 
-            icon_size="1.5x",
+            icon_size="1.8x",
             key=f"mic_{st.session_state.uploader_key}"
         )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
 
 # --- 6. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
 prompt = prompt_text
@@ -297,7 +314,6 @@ if prompt:
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-            # Bersihkan uploader gambar dan audio
             st.session_state.temp_image = None
             st.session_state.temp_doc = None
             st.session_state.uploader_key += 1 
