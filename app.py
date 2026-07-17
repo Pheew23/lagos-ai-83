@@ -206,14 +206,10 @@ with input_container:
     with col_input:
         prompt = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
 
+# ... (Kode bagian 1 sampai 5 tetap sama) ...
+
 # --- 6. LOGIKA PEMROSESAN ---
 if prompt:
-    konten_payload = []
-    
-    if st.session_state.temp_image:
-        base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
-        konten_payload.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}})
-    
     teks_dokumen = ""
     if st.session_state.temp_doc:
         with st.spinner("Membaca referensi dokumen..."):
@@ -222,7 +218,17 @@ if prompt:
             teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
 
     final_prompt = teks_dokumen + prompt
-    konten_payload.append({"type": "text", "text": final_prompt})
+
+    # PERBAIKAN: Bedakan format payload untuk teks biasa vs multimodal (gambar)
+    if st.session_state.temp_image:
+        base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
+        konten_payload = [
+            {"type": "text", "text": final_prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+        ]
+    else:
+        # Kirim sebagai teks String biasa jika tidak ada gambar
+        konten_payload = final_prompt 
 
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -236,7 +242,7 @@ if prompt:
 
         try:
             response_stream = client.chat.completions.create(
-                model=MODEL_NAME, # Menggunakan model yang dipilih dari selectbox (Nilai string aslinya otomatis terjaga)
+                model=MODEL_NAME, 
                 messages=st.session_state.messages,
                 temperature=0.4,
                 max_tokens=4096,
@@ -252,6 +258,7 @@ if prompt:
 
             placeholder.markdown(full_response)
             
+            # Format ulang log chat user menjadi String standar di riwayat setelah diproses
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
