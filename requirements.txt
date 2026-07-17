@@ -3,3 +3,6 @@ openai
 python-docx
 pypdf
 streamlit-lottie
+audio-recorder-streamlit
+SpeechRecognition
+requests
