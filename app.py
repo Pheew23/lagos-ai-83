@@ -123,6 +123,9 @@ if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
     st.session_state.temp_doc = None
+# TAMBAHAN: Key dinamis untuk me-reset file uploader secara total
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 # --- BRANDING UTAMA (SELALU TAMPIL DI ATAS) ---
 st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
@@ -187,9 +190,13 @@ st.markdown("<div style='height: 80px'></div>", unsafe_allow_html=True)
 input_container = st.container()
 
 with input_container:
-    if st.session_state.temp_image:
+    # Membaca status widget secara *real-time* menggunakan dynamic key
+    current_img = st.session_state.get(f"img_{st.session_state.uploader_key}")
+    current_doc = st.session_state.get(f"doc_{st.session_state.uploader_key}")
+
+    if current_img:
         st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
-    if st.session_state.temp_doc:
+    if current_doc:
         st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
     col_attach, col_input = st.columns([1, 10])
@@ -197,11 +204,13 @@ with input_container:
     with col_attach:
         with st.popover("📎"):
             st.markdown("**Lampirkan File**")
-            up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
-            up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed")
+            # Menambahkan parameter 'key' dinamis
+            up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
+            up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
             
-            if up_img: st.session_state.temp_image = up_img
-            if up_doc: st.session_state.temp_doc = up_doc
+            # Tanpa 'if', langsung timpa nilainya. Jika di-X (None), maka temp_image ikut jadi None
+            st.session_state.temp_image = up_img
+            st.session_state.temp_doc = up_doc
 
     with col_input:
         prompt = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
@@ -244,7 +253,7 @@ if prompt:
             response_stream = client.chat.completions.create(
                 model=MODEL_NAME, 
                 messages=st.session_state.messages,
-                temperature=0.4,
+                temperature=0.3,
                 max_tokens=4096,
                 stream=True
             )
@@ -262,8 +271,10 @@ if prompt:
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
+            # PERBAIKAN: Bersihkan memori dan reset file uploader widget
             st.session_state.temp_image = None
             st.session_state.temp_doc = None
+            st.session_state.uploader_key += 1 # Mengganti ID widget agar benar-benar kosong
             
             st.rerun()
 
