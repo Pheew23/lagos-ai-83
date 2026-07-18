@@ -165,10 +165,10 @@ with st.sidebar:
     
     st.markdown("### 🧠 Pilih Model AI")
     MODEL_MAPPING = {
-        "google/gemma-4-31b-it": "1. Stabil",
+        "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
-        "openai/gpt-oss-120b": "4. Sangat Cepat(text only)",
+        "deepseek-ai/deepseek-v4-pro": "4. Stabil",
         "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
     
