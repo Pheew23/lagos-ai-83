@@ -10,6 +10,7 @@ import speech_recognition as sr
 import sqlite3
 import json
 import uuid
+import hashlib
 from datetime import datetime
 import streamlit.components.v1 as components
 
@@ -104,6 +105,138 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- FUNGSI DATABASE MULTI-USER ---
+DB_NAME = 'lagos_multiuser.db'
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Tabel Pengguna
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (username TEXT PRIMARY KEY, password TEXT)''')
+    # Tabel Sesi (sekarang memiliki kolom username)
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions
+                 (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
+    # Tabel Pesan
+    c.execute('''CREATE TABLE IF NOT EXISTS messages
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
+    conn.commit()
+    conn.close()
+
+def register_user(username, password):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
+        conn.commit()
+        success = True
+    except sqlite3.IntegrityError:
+        success = False # Username sudah ada
+    conn.close()
+    return success
+
+def authenticate_user(username, password):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT password FROM users WHERE username=?", (username,))
+    row = c.fetchone()
+    conn.close()
+    if row and row[0] == hash_password(password):
+        return True
+    return False
+
+def get_user_sessions(username):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Hanya mengambil sesi milik username yang sedang login
+    c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def load_session_messages(session_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
+    rows = c.fetchall()
+    conn.close()
+    
+    msgs = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+    for r, c in rows:
+        try:
+            msgs.append({"role": r, "content": json.loads(c)})
+        except:
+            msgs.append({"role": r, "content": c})
+    return msgs
+
+def save_session_db(session_id, username, title, messages):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO sessions (session_id, username, title, updated_at) VALUES (?, ?, ?, ?)", 
+              (session_id, username, title, datetime.now()))
+    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    for msg in messages:
+        if msg["role"] != "system":
+            c.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
+                      (session_id, msg["role"], json.dumps(msg["content"])))
+    conn.commit()
+    conn.close()
+
+def delete_session_db(session_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER) ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+
+if not st.session_state.logged_in:
+    st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
+        
+        with tab_login:
+            log_user = st.text_input("Username", key="log_user")
+            log_pass = st.text_input("Password", type="password", key="log_pass")
+            if st.button("Masuk", use_container_width=True, type="primary"):
+                if authenticate_user(log_user, log_pass):
+                    st.session_state.logged_in = True
+                    st.session_state.username = log_user
+                    st.rerun()
+                else:
+                    st.error("Username atau password salah!")
+                    
+        with tab_register:
+            reg_user = st.text_input("Username Baru", key="reg_user")
+            reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
+            if st.button("Daftar & Buat Akun", use_container_width=True):
+                if reg_user and reg_pass:
+                    if register_user(reg_user, reg_pass):
+                        st.success("✅ Berhasil mendaftar! Silakan buka tab 'Masuk'.")
+                    else:
+                        st.error("❌ Username sudah dipakai, silakan pilih yang lain.")
+                else:
+                    st.warning("⚠️ Harap isi username dan password!")
+    
+    st.stop() # Hentikan eksekusi kode di bawah ini jika belum login
+
+# ==========================================
+# KODE DI BAWAH INI HANYA JALAN JIKA SUDAH LOGIN
+# ==========================================
+
 # --- KONFIGURASI API ---
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -154,63 +287,6 @@ def buat_file_word(riwayat_pesan):
     bio.seek(0)
     return bio
 
-# --- FUNGSI DATABASE (MULTI-SESSION) ---
-DB_NAME = 'lagos_history.db'
-
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions
-                 (session_id TEXT PRIMARY KEY, title TEXT, updated_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS messages
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
-    conn.commit()
-    conn.close()
-
-def get_all_sessions():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT session_id, title FROM sessions ORDER BY updated_at DESC")
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-def load_session_messages(session_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
-    rows = c.fetchall()
-    conn.close()
-    
-    msgs = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-    for r, c in rows:
-        try:
-            msgs.append({"role": r, "content": json.loads(c)})
-        except:
-            msgs.append({"role": r, "content": c})
-    return msgs
-
-def save_session_db(session_id, title, messages):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO sessions (session_id, title, updated_at) VALUES (?, ?, ?)", 
-              (session_id, title, datetime.now()))
-    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-    for msg in messages:
-        if msg["role"] != "system":
-            c.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
-                      (session_id, msg["role"], json.dumps(msg["content"])))
-    conn.commit()
-    conn.close()
-
-def delete_session_db(session_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
-    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-    conn.commit()
-    conn.close()
-
 def generate_title_from_messages(messages):
     for msg in messages:
         if msg["role"] == "user":
@@ -220,9 +296,7 @@ def generate_title_from_messages(messages):
             return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
     return "Obrolan Baru"
 
-init_db()
-
-# --- 3. INISIALISASI SESSION STATE ---
+# --- 4. INISIALISASI SESSION STATE OBROLAN ---
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 if "messages" not in st.session_state:
@@ -238,15 +312,18 @@ if "uploader_key" not in st.session_state:
 st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
-# --- SIDEBAR (FITUR HISTORY SEPERTI GEMINI) ---
+# --- SIDEBAR (FITUR HISTORY SPESIFIK USER) ---
 with st.sidebar:
+    st.success(f"👤 Login sebagai: **{st.session_state.username}**")
+    
     if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
 
-    st.markdown("### 🗂️ Riwayat Obrolan")
-    sessions = get_all_sessions()
+    st.markdown("### 🗂️ Riwayat Obrolan Anda")
+    # Hanya memuat sesi milik user yang sedang login
+    sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
         st.caption("Belum ada riwayat obrolan.")
@@ -296,7 +373,28 @@ with st.sidebar:
             use_container_width=True
         )
 
-# --- 4. AREA OBROLAN UTAMA ---
+    st.divider()
+    if st.button("🚪 Keluar (Logout)", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.current_session_id = None
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        st.rerun()
+        
+    st.markdown("### 🛠️ Admin Panel")
+    try:
+        with open(DB_NAME, "rb") as db_file:
+            st.download_button(
+                label="📦 Download Database (Admin)",
+                data=db_file,
+                file_name="lagos_multiuser.db",
+                mime="application/octet-stream",
+                use_container_width=True
+            )
+    except FileNotFoundError:
+        pass
+
+# --- 5. AREA OBROLAN UTAMA ---
 if len(st.session_state.messages) == 1:
     st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
@@ -309,11 +407,9 @@ for message in st.session_state.messages:
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
-# --- SKRIP AUTO-SCROLL KE BAWAH (DIPERBARUI) ---
-# Menaruh "Jangkar" tidak terlihat di paling bawah layar
+# --- SKRIP AUTO-SCROLL KE BAWAH ---
 st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
 
-# JavaScript mencari "Jangkar" tersebut dan memfokuskan layar ke sana dengan jeda waktu
 components.html(
     """
     <script>
@@ -323,17 +419,16 @@ components.html(
             if (marker) {
                 marker.scrollIntoView({behavior: 'auto', block: 'end'});
             } else {
-                // Alternatif cadangan jika marker gagal dimuat
                 var scrollNode = parentDoc.querySelector('.stMainBlockContainer') || parentDoc.querySelector('.main');
                 if(scrollNode) scrollNode.scrollTo(0, scrollNode.scrollHeight);
             }
-        }, 300); // Jeda 300 milidetik agar obrolan selesai di-render
+        }, 300);
     </script>
     """,
     height=0
 )
 
-# --- 5. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
+# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
 input_container = st.container()
 
 with input_container:
@@ -368,7 +463,7 @@ with input_container:
             key=f"mic_{st.session_state.uploader_key}"
         )
 
-# --- 6. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
+# --- 7. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
 prompt = prompt_text
 
 if audio_bytes and not prompt_text:
@@ -429,26 +524,4 @@ if prompt:
                     delta = chunk.choices[0].delta.content
                     if delta:
                         full_response += delta
-                        placeholder.markdown(full_response + "▌")
-
-            placeholder.markdown(full_response)
-            
-            st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-            if st.session_state.current_session_id is None:
-                st.session_state.current_session_id = str(uuid.uuid4())
-            
-            judul_chat = generate_title_from_messages(st.session_state.messages)
-            save_session_db(st.session_state.current_session_id, judul_chat, st.session_state.messages)
-
-            st.session_state.temp_image = None
-            st.session_state.temp_doc = None
-            st.session_state.uploader_key += 1 
-            
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"Kesalahan teknis pada engine Lagos AI: {str(e)}")
-            if st.session_state.messages[-1]["role"] == "user":
-                st.session_state.messages.pop()
+                        
