@@ -7,6 +7,8 @@ import requests
 from docx import Document
 from audio_recorder_streamlit import audio_recorder
 import speech_recognition as sr
+import sqlite3  # [TAMBAHAN] Modul SQLite
+import json     # [TAMBAHAN] Modul JSON untuk parse list konten
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -144,9 +146,49 @@ def buat_file_word(riwayat_pesan):
     bio.seek(0)
     return bio
 
+# --- [TAMBAHAN] FUNGSI SQLITE DATABASE ---
+def init_db():
+    """Inisialisasi database SQLite dan buat tabel jika belum ada."""
+    conn = sqlite3.connect('chat_history.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS messages
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT)''')
+    conn.commit()
+    conn.close()
+
+def load_db():
+    """Memuat riwayat chat dari SQLite saat aplikasi dibuka."""
+    conn = sqlite3.connect('chat_history.db')
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM messages")
+    rows = c.fetchall()
+    conn.close()
+    
+    msgs = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+    for r, c in rows:
+        try:
+            msgs.append({"role": r, "content": json.loads(c)})
+        except:
+            msgs.append({"role": r, "content": c})
+    return msgs
+
+def sync_db(messages):
+    """Sinkronisasi st.session_state.messages dengan SQLite (Timpa & Simpan Ulang)."""
+    conn = sqlite3.connect('chat_history.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM messages")
+    for msg in messages:
+        if msg["role"] != "system":
+            c.execute("INSERT INTO messages (role, content) VALUES (?, ?)", (msg["role"], json.dumps(msg["content"])))
+    conn.commit()
+    conn.close()
+
+# Panggil inisiasi DB di awal mula
+init_db()
+
 # --- 3. INISIALISASI SESSION STATE ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+    st.session_state.messages = load_db() # [MODIFIKASI] Memuat dari DB menggantikan nilai awal statis
 if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
@@ -183,6 +225,7 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Bersihkan Memori Chat", type="secondary", use_container_width=True):
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        sync_db(st.session_state.messages) # [TAMBAHAN] Kosongkan riwayat di SQLite juga
         st.rerun()
     
     if len(st.session_state.messages) > 1:
@@ -314,6 +357,8 @@ if prompt:
             
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+            sync_db(st.session_state.messages) # [TAMBAHAN] Simpan update histori ke database
 
             st.session_state.temp_image = None
             st.session_state.temp_doc = None
