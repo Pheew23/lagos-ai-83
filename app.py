@@ -7,15 +7,17 @@ import requests
 from docx import Document
 from audio_recorder_streamlit import audio_recorder
 import speech_recognition as sr
-import sqlite3  # [TAMBAHAN] Modul SQLite
-import json     # [TAMBAHAN] Modul JSON untuk parse list konten
+import sqlite3
+import json
+import uuid  # [TAMBAHAN] Untuk membuat ID Sesi unik
+from datetime import datetime  # [TAMBAHAN] Untuk merekam waktu obrolan
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Lagos AI 9.1 | Premium Chat",
     page_icon="🔮",
     layout="centered", 
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Buka sidebar otomatis untuk lihat history
 )
 
 # --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
@@ -30,7 +32,6 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         
-        /* Branding Lagos AI di Tengah Atas */
         .header-title {
             text-align: center;
             font-size: 2.2rem;
@@ -67,13 +68,10 @@ st.markdown("""
             border: 1px solid rgba(125, 78, 255, 0.3);
         }
 
-        /* --- UI GEMINI STYLE --- */
-        /* Memastikan elemen kolom (Attach, Teks, Mic) berada lurus di tengah */
         [data-testid="stHorizontalBlock"] {
             align-items: center !important;
         }
 
-        /* Menyulap tombol popover lampiran menjadi bulat minimalis */
         [data-testid="stPopover"] button {
             border-radius: 50% !important;
             height: 48px !important;
@@ -93,6 +91,16 @@ st.markdown("""
             color: #7d4eff !important;
             transform: scale(1.05) !important;
         }
+        
+        /* Merapikan tombol history di sidebar */
+        .history-btn p {
+            margin: 0;
+            font-size: 0.9rem;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,7 +108,7 @@ st.markdown("""
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
-# --- FUNGSI PEMBANTU ---
+# --- FUNGSI PEMBANTU MULTIMEDIA ---
 @st.cache_data(show_spinner=False)
 def konversi_gambar_ke_base64(uploaded_file):
     if uploaded_file is not None:
@@ -146,21 +154,33 @@ def buat_file_word(riwayat_pesan):
     bio.seek(0)
     return bio
 
-# --- [TAMBAHAN] FUNGSI SQLITE DATABASE ---
+# --- FUNGSI DATABASE (MULTI-SESSION) ---
+DB_NAME = 'lagos_history.db'
+
 def init_db():
-    """Inisialisasi database SQLite dan buat tabel jika belum ada."""
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # Tabel untuk menyimpan daftar sesi obrolan
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions
+                 (session_id TEXT PRIMARY KEY, title TEXT, updated_at TIMESTAMP)''')
+    # Tabel untuk menyimpan pesan di dalam setiap sesi
     c.execute('''CREATE TABLE IF NOT EXISTS messages
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
     conn.commit()
     conn.close()
 
-def load_db():
-    """Memuat riwayat chat dari SQLite saat aplikasi dibuka."""
-    conn = sqlite3.connect('chat_history.db')
+def get_all_sessions():
+    conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT role, content FROM messages")
+    c.execute("SELECT session_id, title FROM sessions ORDER BY updated_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def load_session_messages(session_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
     rows = c.fetchall()
     conn.close()
     
@@ -172,23 +192,47 @@ def load_db():
             msgs.append({"role": r, "content": c})
     return msgs
 
-def sync_db(messages):
-    """Sinkronisasi st.session_state.messages dengan SQLite (Timpa & Simpan Ulang)."""
-    conn = sqlite3.connect('chat_history.db')
+def save_session_db(session_id, title, messages):
+    conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("DELETE FROM messages")
+    # Simpan atau update sesi
+    c.execute("INSERT OR REPLACE INTO sessions (session_id, title, updated_at) VALUES (?, ?, ?)", 
+              (session_id, title, datetime.now()))
+    # Timpa pesan lama untuk sesi ini dan masukkan yang baru
+    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
     for msg in messages:
         if msg["role"] != "system":
-            c.execute("INSERT INTO messages (role, content) VALUES (?, ?)", (msg["role"], json.dumps(msg["content"])))
+            c.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
+                      (session_id, msg["role"], json.dumps(msg["content"])))
     conn.commit()
     conn.close()
 
-# Panggil inisiasi DB di awal mula
+def delete_session_db(session_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    conn.commit()
+    conn.close()
+
+def generate_title_from_messages(messages):
+    """Membuat judul obrolan berdasarkan pesan pertama user"""
+    for msg in messages:
+        if msg["role"] == "user":
+            content = msg["content"]
+            text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+            # Hilangkan teks injeksi dokumen jika ada
+            text = text.split("[AKHIR KONTEN]\n\n")[-1]
+            return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
+    return "Obrolan Baru"
+
 init_db()
 
 # --- 3. INISIALISASI SESSION STATE ---
+if "current_session_id" not in st.session_state:
+    st.session_state.current_session_id = None
 if "messages" not in st.session_state:
-    st.session_state.messages = load_db() # [MODIFIKASI] Memuat dari DB menggantikan nilai awal statis
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
 if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
@@ -200,10 +244,37 @@ if "uploader_key" not in st.session_state:
 st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (FITUR HISTORY SEPERTI GEMINI) ---
 with st.sidebar:
-    st.markdown("### ⚙️ Engine Status")
-    st.success("🤖 Lagos AI 9.1 Active")
+    if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
+        st.session_state.current_session_id = None
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        st.rerun()
+
+    st.markdown("### 🗂️ Riwayat Obrolan")
+    sessions = get_all_sessions()
+    
+    if not sessions:
+        st.caption("Belum ada riwayat obrolan.")
+    else:
+        for sess_id, title in sessions:
+            col_btn, col_del = st.columns([8, 2])
+            with col_btn:
+                # Highlight tombol jika sedang aktif
+                btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
+                if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
+                    st.session_state.current_session_id = sess_id
+                    st.session_state.messages = load_session_messages(sess_id)
+                    st.rerun()
+            with col_del:
+                if st.button("🗑️", key=f"del_{sess_id}"):
+                    delete_session_db(sess_id)
+                    if st.session_state.current_session_id == sess_id:
+                        st.session_state.current_session_id = None
+                        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+                    st.rerun()
+
+    st.divider()
     
     st.markdown("### 🧠 Pilih Model AI")
     MODEL_MAPPING = {
@@ -222,12 +293,6 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     
-    st.divider()
-    if st.button("🗑️ Bersihkan Memori Chat", type="secondary", use_container_width=True):
-        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-        sync_db(st.session_state.messages) # [TAMBAHAN] Kosongkan riwayat di SQLite juga
-        st.rerun()
-    
     if len(st.session_state.messages) > 1:
         file_word = buat_file_word(st.session_state.messages)
         st.download_button(
@@ -235,8 +300,7 @@ with st.sidebar:
             data=file_word,
             file_name="Lagos_AI_9.1_Report.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-            type="primary"
+            use_container_width=True
         )
 
 # --- 4. AREA OBROLAN UTAMA ---
@@ -264,11 +328,10 @@ with input_container:
     if current_doc:
         st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    # Membagi antarmuka menjadi 3 kolom sejajar
     col_attach, col_input, col_mic = st.columns([1, 8, 1])
     
     with col_attach:
-        with st.popover("➕"): # Mengubah icon menjadi plus ala Gemini
+        with st.popover("➕"): 
             st.markdown("**Lampirkan File**")
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
@@ -281,7 +344,7 @@ with input_container:
     with col_mic:
         audio_bytes = audio_recorder(
             text="", 
-            recording_color="#ff4b4b", # Berubah merah saat merekam
+            recording_color="#ff4b4b",
             neutral_color="#888888", 
             icon_name="microphone", 
             icon_size="1.8x",
@@ -291,7 +354,6 @@ with input_container:
 # --- 6. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
 prompt = prompt_text
 
-# Cek jika ada audio masuk dan tidak ada ketikan manual
 if audio_bytes and not prompt_text:
     with st.spinner("Menerjemahkan suara..."):
         r = sr.Recognizer()
@@ -307,7 +369,6 @@ if audio_bytes and not prompt_text:
             st.error(f"Sistem gagal memproses suara: {e}")
             prompt = None
 
-# Lanjut ke proses model utama
 if prompt:
     teks_dokumen = ""
     if st.session_state.temp_doc:
@@ -358,7 +419,16 @@ if prompt:
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
-            sync_db(st.session_state.messages) # [TAMBAHAN] Simpan update histori ke database
+            # --- MANAJEMEN PENYIMPANAN SESI ---
+            # Jika ini chat baru, buat ID Sesi baru
+            if st.session_state.current_session_id is None:
+                st.session_state.current_session_id = str(uuid.uuid4())
+            
+            # Generate judul dari isi pesan
+            judul_chat = generate_title_from_messages(st.session_state.messages)
+            
+            # Simpan ke Database
+            save_session_db(st.session_state.current_session_id, judul_chat, st.session_state.messages)
 
             st.session_state.temp_image = None
             st.session_state.temp_doc = None
