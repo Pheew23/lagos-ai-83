@@ -9,15 +9,16 @@ from audio_recorder_streamlit import audio_recorder
 import speech_recognition as sr
 import sqlite3
 import json
-import uuid  # [TAMBAHAN] Untuk membuat ID Sesi unik
-from datetime import datetime  # [TAMBAHAN] Untuk merekam waktu obrolan
+import uuid
+from datetime import datetime
+import streamlit.components.v1 as components
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Lagos AI 9.1 | Premium Chat",
     page_icon="🔮",
     layout="centered", 
-    initial_sidebar_state="expanded" # Buka sidebar otomatis untuk lihat history
+    initial_sidebar_state="expanded"
 )
 
 # --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
@@ -92,7 +93,6 @@ st.markdown("""
             transform: scale(1.05) !important;
         }
         
-        /* Merapikan tombol history di sidebar */
         .history-btn p {
             margin: 0;
             font-size: 0.9rem;
@@ -160,10 +160,8 @@ DB_NAME = 'lagos_history.db'
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Tabel untuk menyimpan daftar sesi obrolan
     c.execute('''CREATE TABLE IF NOT EXISTS sessions
                  (session_id TEXT PRIMARY KEY, title TEXT, updated_at TIMESTAMP)''')
-    # Tabel untuk menyimpan pesan di dalam setiap sesi
     c.execute('''CREATE TABLE IF NOT EXISTS messages
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
     conn.commit()
@@ -195,10 +193,8 @@ def load_session_messages(session_id):
 def save_session_db(session_id, title, messages):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Simpan atau update sesi
     c.execute("INSERT OR REPLACE INTO sessions (session_id, title, updated_at) VALUES (?, ?, ?)", 
               (session_id, title, datetime.now()))
-    # Timpa pesan lama untuk sesi ini dan masukkan yang baru
     c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
     for msg in messages:
         if msg["role"] != "system":
@@ -216,12 +212,10 @@ def delete_session_db(session_id):
     conn.close()
 
 def generate_title_from_messages(messages):
-    """Membuat judul obrolan berdasarkan pesan pertama user"""
     for msg in messages:
         if msg["role"] == "user":
             content = msg["content"]
             text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-            # Hilangkan teks injeksi dokumen jika ada
             text = text.split("[AKHIR KONTEN]\n\n")[-1]
             return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
     return "Obrolan Baru"
@@ -260,7 +254,6 @@ with st.sidebar:
         for sess_id, title in sessions:
             col_btn, col_del = st.columns([8, 2])
             with col_btn:
-                # Highlight tombol jika sedang aktif
                 btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
                 if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                     st.session_state.current_session_id = sess_id
@@ -315,6 +308,19 @@ for message in st.session_state.messages:
         st.markdown(text_disp)
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
+
+# SKRIP AUTO-SCROLL KE BAWAH
+components.html(
+    f"""
+    <script>
+        var body = window.parent.document.querySelector('.main');
+        if (body) {{
+            body.scrollTo(0, body.scrollHeight);
+        }}
+    </script>
+    """,
+    height=0
+)
 
 # --- 5. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
 input_container = st.container()
@@ -419,15 +425,10 @@ if prompt:
             st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
-            # --- MANAJEMEN PENYIMPANAN SESI ---
-            # Jika ini chat baru, buat ID Sesi baru
             if st.session_state.current_session_id is None:
                 st.session_state.current_session_id = str(uuid.uuid4())
             
-            # Generate judul dari isi pesan
             judul_chat = generate_title_from_messages(st.session_state.messages)
-            
-            # Simpan ke Database
             save_session_db(st.session_state.current_session_id, judul_chat, st.session_state.messages)
 
             st.session_state.temp_image = None
