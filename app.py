@@ -524,4 +524,28 @@ if prompt:
                     delta = chunk.choices[0].delta.content
                     if delta:
                         full_response += delta
-                        
+                        placeholder.markdown(full_response + "▌")
+
+            placeholder.markdown(full_response)
+            
+            st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+            if st.session_state.current_session_id is None:
+                st.session_state.current_session_id = str(uuid.uuid4())
+            
+            judul_chat = generate_title_from_messages(st.session_state.messages)
+            
+            # SIMPAN KE DATABASE DENGAN NAMA USER YANG SEDANG LOGIN
+            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+
+            st.session_state.temp_image = None
+            st.session_state.temp_doc = None
+            st.session_state.uploader_key += 1 
+            
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Kesalahan teknis pada engine Lagos AI: {str(e)}")
+            if st.session_state.messages[-1]["role"] == "user":
+                st.session_state.messages.pop()
