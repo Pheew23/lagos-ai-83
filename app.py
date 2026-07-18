@@ -309,14 +309,25 @@ for message in st.session_state.messages:
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
-# SKRIP AUTO-SCROLL KE BAWAH
+# --- SKRIP AUTO-SCROLL KE BAWAH (DIPERBARUI) ---
+# Menaruh "Jangkar" tidak terlihat di paling bawah layar
+st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
+
+# JavaScript mencari "Jangkar" tersebut dan memfokuskan layar ke sana dengan jeda waktu
 components.html(
-    f"""
+    """
     <script>
-        var body = window.parent.document.querySelector('.main');
-        if (body) {{
-            body.scrollTo(0, body.scrollHeight);
-        }}
+        setTimeout(function() {
+            var parentDoc = window.parent.document;
+            var marker = parentDoc.getElementById('bottom-marker');
+            if (marker) {
+                marker.scrollIntoView({behavior: 'auto', block: 'end'});
+            } else {
+                // Alternatif cadangan jika marker gagal dimuat
+                var scrollNode = parentDoc.querySelector('.stMainBlockContainer') || parentDoc.querySelector('.main');
+                if(scrollNode) scrollNode.scrollTo(0, scrollNode.scrollHeight);
+            }
+        }, 300); // Jeda 300 milidetik agar obrolan selesai di-render
     </script>
     """,
     height=0
