@@ -490,45 +490,30 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang menggambar (Qwen-Image via Together AI)..."):
+            with st.spinner("🎨 Lagos AI sedang merender gambar (FLUX.1-dev)..."):
                 try:
-                    # Endpoint resmi dari Together AI sesuai dokumentasi terbaru
-                    api_url = "https://api.together.ai/v1/images/generations"
+                    HF_TOKEN = st.secrets.get("HF_TOKEN", "") 
                     
-                    # Mengambil API key khusus Together AI dari st.secrets. 
-                    # Pastikan Anda sudah menambahkannya di Streamlit secrets!
-                    together_key = st.secrets.get("TOGETHER_API_KEY", "")
-                    
-                    if not together_key:
-                        st.error("Kunci TOGETHER_API_KEY belum dikonfigurasi di st.secrets.")
+                    if not HF_TOKEN:
+                        st.error("Token HF_TOKEN belum dikonfigurasi di st.secrets")
                     else:
-                        headers = {
-                            "Authorization": f"Bearer {together_key}",
-                            "Content-Type": "application/json"
-                        }
+                        # Menggunakan endpoint FLUX.1-dev di Hugging Face
+                        api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+                        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
                         
-                        # Payload yang dicocokkan 100% dengan cURL dari screenshot
+                        # Payload untuk FLUX.1-dev
                         payload = {
-                            "model": "Qwen/Qwen-Image", 
-                            "prompt": image_prompt,
-                            "disable_safety_checker": False,
-                            "response_format": "b64_json" # Meminta output format base64
+                            "inputs": image_prompt,
+                            "options": {"wait_for_model": True}
                         }
                         
                         response = requests.post(api_url, headers=headers, json=payload)
                         
                         if response.status_code == 200:
-                            res_data = response.json()
-                            img_data = res_data["data"][0]
+                            image_bytes = response.content
+                            base64_img = base64.b64encode(image_bytes).decode('utf-8')
                             
-                            # Validasi apakah Together AI mengembalikan URL atau Base64
-                            if "b64_json" in img_data:
-                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
-                            elif "url" in img_data:
-                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_data['url']})"
-                            else:
-                                raise ValueError("Struktur balasan API tidak dikenali.")
-                                
+                            img_markdown = f"Berikut adalah hasil render untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
                             st.markdown(img_markdown, unsafe_allow_html=True)
                             st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                             
@@ -539,17 +524,16 @@ if prompt:
                             judul_chat = generate_title_from_messages(st.session_state.messages)
                             save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
                             
-                            # Reset Uploader state
                             st.session_state.temp_image = None
                             st.session_state.temp_doc = None
                             st.session_state.uploader_key += 1 
-                                
+                            
                         else:
-                            st.error(f"Error dari Server Together AI ({response.status_code}): {response.text}")
+                            st.error(f"Gagal memproses gambar. Pastikan token valid dan model tidak sedang 'loading'. ({response.status_code}): {response.text}")
                             st.session_state.messages.pop()
-                        
+                            
                 except Exception as e:
-                    st.error(f"Kesalahan internal sistem: {str(e)}")
+                    st.error(f"Kesalahan internal: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
