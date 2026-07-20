@@ -350,7 +350,7 @@ with st.sidebar:
     MODEL_MAPPING = {
         "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
         "thinkingmachines/inkling": "2. Cepat(text only)",
-        "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
+        "stepfun-ai/step-3.7-flash": "3. Analisis Mendalam",
         "deepseek-ai/deepseek-v4-pro": "4. Stabil",
         "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
