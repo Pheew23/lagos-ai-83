@@ -351,7 +351,7 @@ with st.sidebar:
         "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "stepfun-ai/step-3.7-flash": "3. Analisis Mendalam",
-        "z-ai/glm-5.2": "4. Stabil",
+        "google/diffusiongemma-26b-a4b-it": "4. Stabil",
         "mistralai/mistral-large-3-675b-instruct-2512": "5. Projek Khusus"
     }
     
