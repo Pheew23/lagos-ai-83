@@ -117,7 +117,7 @@ def init_db():
     # Tabel Pengguna
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (username TEXT PRIMARY KEY, password TEXT)''')
-    # Tabel Sesi (sekarang memiliki kolom username)
+    # Tabel Sesi
     c.execute('''CREATE TABLE IF NOT EXISTS sessions
                  (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
     # Tabel Pesan
@@ -134,7 +134,7 @@ def register_user(username, password):
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
-        success = False # Username sudah ada
+        success = False 
     conn.close()
     return success
 
@@ -151,7 +151,6 @@ def authenticate_user(username, password):
 def get_user_sessions(username):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Hanya mengambil sesi milik username yang sedang login
     c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
     rows = c.fetchall()
     conn.close()
@@ -231,7 +230,7 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("⚠️ Harap isi username dan password!")
     
-    st.stop() # Hentikan eksekusi kode di bawah ini jika belum login
+    st.stop()
 
 # ==========================================
 # KODE DI BAWAH INI HANYA JALAN JIKA SUDAH LOGIN
@@ -322,7 +321,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("### 🗂️ Riwayat Obrolan Anda")
-    # Hanya memuat sesi milik user yang sedang login
     sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
@@ -396,14 +394,14 @@ with st.sidebar:
 
 # --- 5. AREA OBROLAN UTAMA ---
 if len(st.session_state.messages) == 1:
-    st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan file, bicara, atau ketik <b>/gambar [teks]</b> untuk buat gambar.</p>", unsafe_allow_html=True)
 
 for message in st.session_state.messages:
     if message["role"] == "system": continue
     with st.chat_message(message["role"]):
         content = message["content"]
         text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-        st.markdown(text_disp)
+        st.markdown(text_disp, unsafe_allow_html=True)
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
@@ -451,7 +449,7 @@ with input_container:
             st.session_state.temp_doc = up_doc
 
     with col_input:
-        prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
+        prompt_text = st.chat_input("Tanyakan AI... (Gunakan /gambar [deskripsi] untuk visual)")
 
     with col_mic:
         audio_bytes = audio_recorder(
@@ -482,70 +480,120 @@ if audio_bytes and not prompt_text:
             prompt = None
 
 if prompt:
-    teks_dokumen = ""
-    if st.session_state.temp_doc:
-        with st.spinner("Membaca referensi dokumen..."):
-            teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-        if teks_dokumen:
-            teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
-
-    final_prompt = teks_dokumen + prompt
-
-    if st.session_state.temp_image:
-        base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
-        konten_payload = [
-            {"type": "text", "text": final_prompt},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-        ]
+    # --- FITUR BARU: GENERATE GAMBAR ---
+    if prompt.strip().lower().startswith("/gambar "):
+        image_prompt = prompt.strip()[8:].strip()
+        
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("assistant"):
+            client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+            with st.spinner("🎨 Lagos AI sedang menggambar..."):
+                try:
+                    # Request ke endpoint image generation (NVIDIA NIM)
+                    # Note: Sesuaikan nama model di bawah jika Qwen image punya ID model spesifik di portal NVIDIA
+                    response = client.images.generate(
+                        model="qwen-image", # atau stabilitai/stable-diffusion-xl-base-1.0
+                        prompt=image_prompt,
+                        n=1,
+                        size="1024x1024",
+                        response_format="b64_json"
+                    )
+                    
+                    # Cek hasil response apakah berupa Base64 JSON atau URL
+                    img_data = response.data[0]
+                    if hasattr(img_data, 'b64_json') and img_data.b64_json:
+                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data.b64_json})"
+                    else:
+                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_data.url})"
+                    
+                    st.markdown(img_markdown, unsafe_allow_html=True)
+                    st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                    
+                    # Simpan ke Database
+                    if st.session_state.current_session_id is None:
+                        st.session_state.current_session_id = str(uuid.uuid4())
+                    
+                    judul_chat = generate_title_from_messages(st.session_state.messages)
+                    save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                    
+                    # Reset Uploader state
+                    st.session_state.temp_image = None
+                    st.session_state.temp_doc = None
+                    st.session_state.uploader_key += 1 
+                    
+                except Exception as e:
+                    st.error(f"Kesalahan saat menghasilkan gambar: {str(e)}")
+                    st.session_state.messages.pop()
+                    
+    # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
     else:
-        konten_payload = final_prompt 
+        teks_dokumen = ""
+        if st.session_state.temp_doc:
+            with st.spinner("Membaca referensi dokumen..."):
+                teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
+            if teks_dokumen:
+                teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
+        final_prompt = teks_dokumen + prompt
 
-    st.session_state.messages.append({"role": "user", "content": konten_payload})
+        if st.session_state.temp_image:
+            base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
+            konten_payload = [
+                {"type": "text", "text": final_prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+            ]
+        else:
+            konten_payload = final_prompt 
 
-    with st.chat_message("assistant"):
-        client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
-        placeholder = st.empty()
-        full_response = ""
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-        try:
-            response_stream = client.chat.completions.create(
-                model=MODEL_NAME, 
-                messages=st.session_state.messages,
-                temperature=0.3,
-                max_tokens=4096,
-                stream=True
-            )
+        st.session_state.messages.append({"role": "user", "content": konten_payload})
 
-            for chunk in response_stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full_response += delta
-                        placeholder.markdown(full_response + "▌")
+        with st.chat_message("assistant"):
+            client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+            placeholder = st.empty()
+            full_response = ""
 
-            placeholder.markdown(full_response)
-            
-            st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-            if st.session_state.current_session_id is None:
-                st.session_state.current_session_id = str(uuid.uuid4())
-            
-            judul_chat = generate_title_from_messages(st.session_state.messages)
-            
-            # SIMPAN KE DATABASE DENGAN NAMA USER YANG SEDANG LOGIN
-            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+            try:
+                response_stream = client.chat.completions.create(
+                    model=MODEL_NAME, 
+                    messages=st.session_state.messages,
+                    temperature=0.3,
+                    max_tokens=4096,
+                    stream=True
+                )
 
-            st.session_state.temp_image = None
-            st.session_state.temp_doc = None
-            st.session_state.uploader_key += 1 
-            
-            st.rerun()
+                for chunk in response_stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            full_response += delta
+                            placeholder.markdown(full_response + "▌")
 
-        except Exception as e:
-            st.error(f"Kesalahan teknis pada engine Lagos AI: {str(e)}")
-            if st.session_state.messages[-1]["role"] == "user":
-                st.session_state.messages.pop()
+                placeholder.markdown(full_response)
+                
+                st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+                if st.session_state.current_session_id is None:
+                    st.session_state.current_session_id = str(uuid.uuid4())
+                
+                judul_chat = generate_title_from_messages(st.session_state.messages)
+                
+                save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+
+                st.session_state.temp_image = None
+                st.session_state.temp_doc = None
+                st.session_state.uploader_key += 1 
+                
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Kesalahan teknis pada engine Lagos AI: {str(e)}")
+                if st.session_state.messages[-1]["role"] == "user":
+                    st.session_state.messages.pop()
