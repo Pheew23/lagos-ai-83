@@ -493,7 +493,7 @@ if prompt:
             with st.spinner("🎨 Lagos AI sedang menggambar (Qwen-Image)..."):
                 try:
                     # Kita gunakan URL integrasi utama NVIDIA secara eksplisit
-                    api_url = "https://integrate.api.nvidia.com/v1/images/generations"
+                    api_url = "https://api.together.ai/v1/images/generations"
                     
                     headers = {
                         "Authorization": f"Bearer {API_KEY}",
