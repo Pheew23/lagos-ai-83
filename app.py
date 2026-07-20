@@ -503,7 +503,7 @@ if prompt:
                     
                     # Jika "qwen-image" mendapat error 404/Model Not Found, ubah menjadi "qwen/qwen-image"
                     payload = {
-                        "model": "qwen-image", 
+                        "model": "Qwen/Qwen-Image", 
                         "prompt": image_prompt,
                         "n": 1,
                         "size": "1024x1024",
