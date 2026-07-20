@@ -492,8 +492,8 @@ if prompt:
         with st.chat_message("assistant"):
             with st.spinner("🎨 Lagos AI sedang menggambar (SD 3.5 Large)..."):
                 try:
-                    # Endpoint resmi NVIDIA untuk Stable Diffusion 3.5 Large
-                    invoke_url = "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3.5-large"
+                    # Endpoint universal NVIDIA untuk Image Generation
+                    invoke_url = "https://integrate.api.nvidia.com/v1/images/generations"
                     
                     headers = {
                         "Authorization": f"Bearer {API_KEY}",
@@ -501,14 +501,11 @@ if prompt:
                         "Content-Type": "application/json"
                     }
                     
-                    # Parameter resmi sesuai dokumentasi NVIDIA Builder
+                    # Payload dengan standar OpenAI menggunakan model SD 3.5 Large
                     payload = {
+                        "model": "stabilityai/stable-diffusion-3.5-large",
                         "prompt": image_prompt,
-                        "cfg_scale": 4.5,
-                        "aspect_ratio": "1:1",
-                        "seed": 0,
-                        "steps": 40,
-                        "negative_prompt": ""
+                        "response_format": "b64_json"
                     }
                     
                     response = requests.post(invoke_url, headers=headers, json=payload)
@@ -516,11 +513,20 @@ if prompt:
                     if response.status_code == 200:
                         res_data = response.json()
                         
-                        # Mengambil data base64 gambar dari response JSON
-                        if "image" in res_data:
-                            base64_img = res_data["image"]
-                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                        if "data" in res_data and len(res_data["data"]) > 0:
+                            img_data = res_data["data"][0]
                             
+                            # Menangani format balasan yang mungkin berupa base64 atau url
+                            if "b64_json" in img_data:
+                                base64_img = img_data["b64_json"]
+                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                            elif "url" in img_data:
+                                img_url = img_data["url"]
+                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_url})"
+                            else:
+                                st.error("Format balasan API tidak dikenali. Tidak ada data gambar.")
+                                raise Exception("No valid image data format found.")
+                                
                             st.markdown(img_markdown, unsafe_allow_html=True)
                             st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                             
@@ -536,7 +542,7 @@ if prompt:
                             st.session_state.temp_doc = None
                             st.session_state.uploader_key += 1 
                         else:
-                            st.error("Struktur balasan API tidak memiliki data gambar.")
+                            st.error("Struktur balasan API kosong.")
                             st.session_state.messages.pop()
                             
                     else:
