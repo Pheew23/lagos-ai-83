@@ -497,7 +497,7 @@ if prompt:
                     
                     # Menggunakan model Stable Diffusion 3.5 Large di NVIDIA Builder
                     response = client.images.generate(
-                        model="stabilityai/stable-diffusion-3.5-large", 
+                        model="stable-diffusion-3.5-large", 
                         prompt=image_prompt,
                         n=1,
                         size="1024x1024",
