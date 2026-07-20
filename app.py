@@ -492,47 +492,59 @@ if prompt:
         with st.chat_message("assistant"):
             with st.spinner("🎨 Lagos AI sedang memproses gambar beresolusi tinggi..."):
                 try:
-                    # Menggunakan endpoint produksi NVIDIA API
-                    image_client = OpenAI(
-                        base_url="https://integrate.api.nvidia.com/v1", 
-                        api_key=API_KEY
-                    )
+                    # Kita kontrol URL-nya secara manual (menggunakan 'ai' alih-alih 'integrate')
+                    api_url = "https://ai.api.nvidia.com/v1/images/generations"
                     
-                    # Pemanggilan standar yang terbukti didukung oleh dokumentasi NIM
-                    response = image_client.images.generate(
-                        model="qwen-image", # Anda juga bisa mencoba "stabilityai/stable-diffusion-3.5-large"
-                        prompt=image_prompt,
-                        n=1,
-                        size="1024x1024",
-                        response_format="b64_json",
-                        # Parameter tambahan khas NVIDIA bisa disisipkan melalui extra_body jika diperlukan nanti
-                        extra_body={"steps": 30, "cfg_scale": 4} 
-                    )
+                    headers = {
+                        "Authorization": f"Bearer {API_KEY}",
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    }
                     
-                    img_data = response.data[0]
+                    # Parameter standar OpenAI Image Generation
+                    payload = {
+                        "model": "stabilityai/stable-diffusion-3.5-large", # Anda juga bisa mencoba "qwen-image"
+                        "prompt": image_prompt,
+                        "n": 1,
+                        "size": "1024x1024",
+                        "response_format": "b64_json"
+                    }
                     
-                    if hasattr(img_data, 'b64_json') and img_data.b64_json:
-                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data.b64_json})"
-                        st.markdown(img_markdown, unsafe_allow_html=True)
-                        st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                    # Eksekusi langsung tanpa perantara library OpenAI
+                    response = requests.post(api_url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        res_data = response.json()
+                        img_data = res_data["data"][0]
                         
-                        # Simpan ke Database
-                        if st.session_state.current_session_id is None:
-                            st.session_state.current_session_id = str(uuid.uuid4())
-                        
-                        judul_chat = generate_title_from_messages(st.session_state.messages)
-                        save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
-                        
-                        # Reset Uploader state
-                        st.session_state.temp_image = None
-                        st.session_state.temp_doc = None
-                        st.session_state.uploader_key += 1 
+                        if "b64_json" in img_data:
+                            # Render gambar base64
+                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
+                            st.markdown(img_markdown, unsafe_allow_html=True)
+                            st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                            
+                            # Simpan ke Database
+                            if st.session_state.current_session_id is None:
+                                st.session_state.current_session_id = str(uuid.uuid4())
+                            
+                            judul_chat = generate_title_from_messages(st.session_state.messages)
+                            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                            
+                            # Reset Uploader state
+                            st.session_state.temp_image = None
+                            st.session_state.temp_doc = None
+                            st.session_state.uploader_key += 1 
+                        else:
+                            st.error("Gagal: Format Base64 tidak ditemukan dalam balasan API.")
+                            st.session_state.messages.pop()
+                            
                     else:
-                        st.error("Server berhasil merespons, tetapi gagal memberikan format Base64.")
+                        # Menampilkan error 404, 401, atau 400 dengan detail langsung dari server NVIDIA
+                        st.error(f"Tanggapan Server NVIDIA ({response.status_code}): {response.text}")
                         st.session_state.messages.pop()
                         
                 except Exception as e:
-                    st.error(f"Kesalahan pada sistem visual AI: {str(e)}")
+                    st.error(f"Kesalahan teknis: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
