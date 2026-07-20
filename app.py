@@ -490,19 +490,25 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang menggambar..."):
+            with st.spinner("🎨 Lagos AI sedang menggambar (SD 3.5 Large)..."):
                 try:
-                    import urllib.parse
+                    # Menggunakan client OpenAI bawaan yang sudah diarahkan ke BASE_URL NVIDIA
+                    client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
                     
-                    # Menggunakan Pollinations AI: Gratis, tanpa API Key, sangat cepat, dan stabil untuk aplikasi skala besar
-                    encoded_prompt = urllib.parse.quote(image_prompt)
-                    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+                    # Menggunakan model Stable Diffusion 3.5 Large di NVIDIA Builder
+                    response = client.images.generate(
+                        model="stabilityai/stable-diffusion-3.5-large", 
+                        prompt=image_prompt,
+                        n=1,
+                        size="1024x1024",
+                        response_format="b64_json"
+                    )
                     
-                    # Verifikasi apakah gambar berhasil di-generate
-                    response = requests.get(image_url)
+                    # Membaca format base64 bawaan dari response OpenAI SDK
+                    img_data = response.data[0]
                     
-                    if response.status_code == 200:
-                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({image_url})"
+                    if hasattr(img_data, 'b64_json') and img_data.b64_json:
+                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data.b64_json})"
                         st.markdown(img_markdown, unsafe_allow_html=True)
                         st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                         
@@ -517,13 +523,13 @@ if prompt:
                         st.session_state.temp_image = None
                         st.session_state.temp_doc = None
                         st.session_state.uploader_key += 1 
-                        
                     else:
-                        st.error("Gagal mengambil gambar dari server. Silakan coba lagi.")
+                        st.error("Gagal memuat gambar. Format balasan dari NVIDIA tidak sesuai.")
                         st.session_state.messages.pop()
                         
                 except Exception as e:
-                    st.error(f"Kesalahan teknis saat menghasilkan gambar: {str(e)}")
+                    # Menangkap error 404 atau autentikasi jika masih terjadi
+                    st.error(f"Kesalahan saat mengakses API NVIDIA: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
