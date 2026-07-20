@@ -501,7 +501,7 @@ if prompt:
                     
                     # Generate menggunakan Stable Diffusion 3.5 Large
                     response = image_client.images.generate(
-                        model="stabilityai/stable-diffusion-3.5-large", 
+                        model="stable-diffusion-3.5-large", 
                         prompt=image_prompt,
                         n=1,
                         size="1024x1024",
