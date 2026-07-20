@@ -500,7 +500,7 @@ if prompt:
                     }
                     
                     payload = {
-                        "model": "stabilityai/stable-diffusion-3-medium-turbo", # GANTI DENGAN ID MODEL YANG BENAR DI NVIDIA
+                        "model": "stable-diffusion-3.5-large", # GANTI DENGAN ID MODEL YANG BENAR DI NVIDIA
                         "prompt": image_prompt,
                         "n": 1,
                         "size": "1024x1024",
