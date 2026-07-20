@@ -490,34 +490,45 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang menggambar (Qwen-Image)..."):
+            with st.spinner("🎨 Lagos AI sedang menggambar (Qwen-Image via Together AI)..."):
                 try:
-                    # Kita gunakan URL integrasi utama NVIDIA secara eksplisit
+                    # Endpoint resmi dari Together AI sesuai dokumentasi terbaru
                     api_url = "https://api.together.ai/v1/images/generations"
                     
-                    headers = {
-                        "Authorization": f"Bearer {API_KEY}",
-                        "Accept": "application/json",
-                        "Content-Type": "application/json"
-                    }
+                    # Mengambil API key khusus Together AI dari st.secrets. 
+                    # Pastikan Anda sudah menambahkannya di Streamlit secrets!
+                    together_key = st.secrets.get("TOGETHER_API_KEY", "")
                     
-                    # Jika "qwen-image" mendapat error 404/Model Not Found, ubah menjadi "qwen/qwen-image"
-                    payload = {
-                        "model": "Qwen/Qwen-Image", 
-                        "prompt": image_prompt,
-                        "n": 1,
-                        "size": "1024x1024",
-                        "response_format": "b64_json"
-                    }
-                    
-                    response = requests.post(api_url, headers=headers, json=payload)
-                    
-                    if response.status_code == 200:
-                        res_data = response.json()
-                        img_data = res_data["data"][0]
+                    if not together_key:
+                        st.error("Kunci TOGETHER_API_KEY belum dikonfigurasi di st.secrets.")
+                    else:
+                        headers = {
+                            "Authorization": f"Bearer {together_key}",
+                            "Content-Type": "application/json"
+                        }
                         
-                        if "b64_json" in img_data:
-                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
+                        # Payload yang dicocokkan 100% dengan cURL dari screenshot
+                        payload = {
+                            "model": "Qwen/Qwen-Image", 
+                            "prompt": image_prompt,
+                            "disable_safety_checker": False,
+                            "response_format": "b64_json" # Meminta output format base64
+                        }
+                        
+                        response = requests.post(api_url, headers=headers, json=payload)
+                        
+                        if response.status_code == 200:
+                            res_data = response.json()
+                            img_data = res_data["data"][0]
+                            
+                            # Validasi apakah Together AI mengembalikan URL atau Base64
+                            if "b64_json" in img_data:
+                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
+                            elif "url" in img_data:
+                                img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_data['url']})"
+                            else:
+                                raise ValueError("Struktur balasan API tidak dikenali.")
+                                
                             st.markdown(img_markdown, unsafe_allow_html=True)
                             st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                             
@@ -532,17 +543,13 @@ if prompt:
                             st.session_state.temp_image = None
                             st.session_state.temp_doc = None
                             st.session_state.uploader_key += 1 
+                                
                         else:
-                            st.error("Server merespons, tetapi gagal memberikan format Base64.")
+                            st.error(f"Error dari Server Together AI ({response.status_code}): {response.text}")
                             st.session_state.messages.pop()
-                            
-                    else:
-                        # Ini akan mencetak pesan error ASLI dari NVIDIA jika gagal
-                        st.error(f"Error Server NVIDIA ({response.status_code}): {response.text}")
-                        st.session_state.messages.pop()
                         
                 except Exception as e:
-                    st.error(f"Kesalahan sistem internal: {str(e)}")
+                    st.error(f"Kesalahan internal sistem: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
