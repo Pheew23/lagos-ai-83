@@ -490,18 +490,17 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang merender gambar (FLUX.1-dev)..."):
+            with st.spinner("🎨 Lagos AI sedang merender gambar (FLUX.1-schnell)..."):
                 try:
                     HF_TOKEN = st.secrets.get("HF_TOKEN", "") 
                     
                     if not HF_TOKEN:
                         st.error("Token HF_TOKEN belum dikonfigurasi di st.secrets")
                     else:
-                        # Menggunakan endpoint FLUX.1-dev di Hugging Face
-                        api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+                        # Menggunakan endpoint FLUX.1-schnell yang lebih cepat dan ramah akses gratis
+                        api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
                         headers = {"Authorization": f"Bearer {HF_TOKEN}"}
                         
-                        # Payload untuk FLUX.1-dev
                         payload = {
                             "inputs": image_prompt,
                             "options": {"wait_for_model": True}
@@ -529,7 +528,7 @@ if prompt:
                             st.session_state.uploader_key += 1 
                             
                         else:
-                            st.error(f"Gagal memproses gambar. Pastikan token valid dan model tidak sedang 'loading'. ({response.status_code}): {response.text}")
+                            st.error(f"Gagal memproses gambar ({response.status_code}): {response.text}")
                             st.session_state.messages.pop()
                             
                 except Exception as e:
