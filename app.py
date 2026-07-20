@@ -352,7 +352,7 @@ with st.sidebar:
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "stepfun-ai/step-3.7-flash": "3. Analisis Mendalam",
         "z-ai/glm-5.2": "4. Stabil",
-        "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
+        "mistralai/mistral-large-3-675b-instruct-2512": "5. Projek Khusus"
     }
     
     MODEL_NAME = st.selectbox(
