@@ -490,10 +490,10 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang memproses gambar beresolusi tinggi..."):
+            with st.spinner("🎨 Lagos AI sedang menggambar (Qwen-Image)..."):
                 try:
-                    # Menggunakan endpoint REST API asli dari NVIDIA API Catalog
-                    api_url = "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-xl-base-1.0"
+                    # Kita gunakan URL integrasi utama NVIDIA secara eksplisit
+                    api_url = "https://integrate.api.nvidia.com/v1/images/generations"
                     
                     headers = {
                         "Authorization": f"Bearer {API_KEY}",
@@ -501,32 +501,23 @@ if prompt:
                         "Content-Type": "application/json"
                     }
                     
-                    # Payload khusus yang diwajibkan oleh domain ai.api.nvidia.com
+                    # Jika "qwen-image" mendapat error 404/Model Not Found, ubah menjadi "qwen/qwen-image"
                     payload = {
-                        "text_prompts": [
-                            {
-                                "text": image_prompt,
-                                "weight": 1
-                            }
-                        ],
-                        "cfg_scale": 5,
-                        "seed": 0,
-                        "steps": 30
+                        "model": "qwen-image", 
+                        "prompt": image_prompt,
+                        "n": 1,
+                        "size": "1024x1024",
+                        "response_format": "b64_json"
                     }
                     
                     response = requests.post(api_url, headers=headers, json=payload)
                     
                     if response.status_code == 200:
                         res_data = response.json()
+                        img_data = res_data["data"][0]
                         
-                        # Parsing struktur data 'artifacts' dari NVIDIA
-                        base64_img = ""
-                        if "artifacts" in res_data and len(res_data["artifacts"]) > 0:
-                            base64_img = res_data["artifacts"][0].get("base64", "")
-                            
-                        if base64_img:
-                            # Render gambar base64 ke markdown
-                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                        if "b64_json" in img_data:
+                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
                             st.markdown(img_markdown, unsafe_allow_html=True)
                             st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                             
@@ -537,20 +528,21 @@ if prompt:
                             judul_chat = generate_title_from_messages(st.session_state.messages)
                             save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
                             
-                            # Reset state input file
+                            # Reset Uploader state
                             st.session_state.temp_image = None
                             st.session_state.temp_doc = None
                             st.session_state.uploader_key += 1 
                         else:
-                            st.error("Server NVIDIA berhasil dipanggil, tetapi tidak mengembalikan data gambar Base64.")
+                            st.error("Server merespons, tetapi gagal memberikan format Base64.")
                             st.session_state.messages.pop()
                             
                     else:
-                        st.error(f"Tanggapan Server NVIDIA ({response.status_code}): {response.text}")
+                        # Ini akan mencetak pesan error ASLI dari NVIDIA jika gagal
+                        st.error(f"Error Server NVIDIA ({response.status_code}): {response.text}")
                         st.session_state.messages.pop()
                         
                 except Exception as e:
-                    st.error(f"Kesalahan teknis internal: {str(e)}")
+                    st.error(f"Kesalahan sistem internal: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
