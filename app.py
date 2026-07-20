@@ -498,6 +498,7 @@ if prompt:
                         st.error("Token HF_TOKEN belum dikonfigurasi di file st.secrets.")
                     else:
                         api_url = "https://api.together.ai/v1/chat/completions"
+                        model= "black-forest-labs/FLUX.1-schnell"
                         headers = {"Authorization": f"Bearer {HF_TOKEN}"}
                         payload = {
                             "inputs": image_prompt,
