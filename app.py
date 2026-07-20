@@ -492,62 +492,34 @@ if prompt:
         with st.chat_message("assistant"):
             with st.spinner("🎨 Lagos AI sedang menggambar..."):
                 try:
-                    # Menggunakan endpoint khusus NVIDIA untuk Image Generation (Stable Diffusion XL)
-                    invoke_url = "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-xl-base-1.0"
+                    import urllib.parse
                     
-                    headers = {
-                        "Authorization": f"Bearer {API_KEY}",
-                        "Accept": "application/json",
-                        "Content-Type": "application/json"
-                    }
+                    # Menggunakan Pollinations AI: Gratis, tanpa API Key, sangat cepat, dan stabil untuk aplikasi skala besar
+                    encoded_prompt = urllib.parse.quote(image_prompt)
+                    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
                     
-                    # Format payload khusus untuk NVIDIA API
-                    payload = {
-                        "text_prompts": [
-                            {
-                                "text": image_prompt,
-                                "weight": 1
-                            }
-                        ],
-                        "cfg_scale": 5,
-                        "seed": 0,
-                        "steps": 30
-                    }
-                    
-                    response = requests.post(invoke_url, headers=headers, json=payload)
+                    # Verifikasi apakah gambar berhasil di-generate
+                    response = requests.get(image_url)
                     
                     if response.status_code == 200:
-                        res_data = response.json()
-                        base64_img = ""
+                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({image_url})"
+                        st.markdown(img_markdown, unsafe_allow_html=True)
+                        st.session_state.messages.append({"role": "assistant", "content": img_markdown})
                         
-                        # Parsing hasil gambar dari NVIDIA
-                        if "artifacts" in res_data:
-                            base64_img = res_data["artifacts"][0]["base64"]
-                        elif "image" in res_data:
-                            base64_img = res_data["image"]
-                            
-                        if base64_img:
-                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{base64_img})"
-                            st.markdown(img_markdown, unsafe_allow_html=True)
-                            st.session_state.messages.append({"role": "assistant", "content": img_markdown})
-                            
-                            # Simpan ke Database
-                            if st.session_state.current_session_id is None:
-                                st.session_state.current_session_id = str(uuid.uuid4())
-                            
-                            judul_chat = generate_title_from_messages(st.session_state.messages)
-                            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
-                            
-                            # Reset Uploader state
-                            st.session_state.temp_image = None
-                            st.session_state.temp_doc = None
-                            st.session_state.uploader_key += 1 
-                        else:
-                            st.error("Gagal membaca data gambar dari balasan API.")
-                            st.session_state.messages.pop()
-                            
+                        # Simpan ke Database
+                        if st.session_state.current_session_id is None:
+                            st.session_state.current_session_id = str(uuid.uuid4())
+                        
+                        judul_chat = generate_title_from_messages(st.session_state.messages)
+                        save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                        
+                        # Reset Uploader state
+                        st.session_state.temp_image = None
+                        st.session_state.temp_doc = None
+                        st.session_state.uploader_key += 1 
+                        
                     else:
-                        st.error(f"Error API ({response.status_code}): {response.text}")
+                        st.error("Gagal mengambil gambar dari server. Silakan coba lagi.")
                         st.session_state.messages.pop()
                         
                 except Exception as e:
