@@ -351,7 +351,7 @@ with st.sidebar:
         "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "stepfun-ai/step-3.7-flash": "3. Analisis Mendalam",
-        "deepseek-ai/deepseek-v4-pro": "4. Stabil",
+        "z-ai/glm-5.2": "4. Stabil",
         "nvidia/nemotron-3-ultra-550b-a55b": "5. Projek Khusus"
     }
     
