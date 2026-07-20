@@ -1,31 +1,17 @@
 import streamlit as st
-
 from openai import OpenAI
-
 import io
-
 import re
-
 import base64
-
 import requests
-
 from docx import Document
-
 from audio_recorder_streamlit import audio_recorder
-
 import speech_recognition as sr
-
 import sqlite3
-
 import json
-
 import uuid
-
 import hashlib
-
 from datetime import datetime
-
 import streamlit.components.v1 as components
 
 
@@ -702,7 +688,7 @@ with st.sidebar:
 
         "thinkingmachines/inkling": "2. Cepat(text only)",
 
-        "mistralai/mistral-medium-3.5-128b": "3. Analisis Mendalam",
+        "moonshotai/kimi-k2.6": "3. Analisis Mendalam",
 
         "deepseek-ai/deepseek-v4-pro": "4. Stabil",
 
