@@ -490,41 +490,59 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
             with st.spinner("🎨 Lagos AI sedang menggambar..."):
                 try:
-                    # Request ke endpoint image generation (NVIDIA NIM)
-                    # Note: Sesuaikan nama model di bawah jika Qwen image punya ID model spesifik di portal NVIDIA
-                    response = client.images.generate(
-                        model="qwen-image", # atau stabilitai/stable-diffusion-xl-base-1.0
-                        prompt=image_prompt,
-                        n=1,
-                        size="1024x1024",
-                        response_format="b64_json"
+                    # Menggunakan modul requests agar lebih stabil dengan API NVIDIA
+                    headers = {
+                        "Authorization": f"Bearer {API_KEY}",
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    payload = {
+                        "model": "stabilityai/stable-diffusion-3-medium-turbo", # GANTI DENGAN ID MODEL YANG BENAR DI NVIDIA
+                        "prompt": image_prompt,
+                        "n": 1,
+                        "size": "1024x1024",
+                        "response_format": "b64_json" 
+                    }
+                    
+                    response = requests.post(
+                        f"{BASE_URL}/images/generations",
+                        headers=headers,
+                        json=payload
                     )
                     
-                    # Cek hasil response apakah berupa Base64 JSON atau URL
-                    img_data = response.data[0]
-                    if hasattr(img_data, 'b64_json') and img_data.b64_json:
-                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data.b64_json})"
+                    if response.status_code == 200:
+                        res_data = response.json()
+                        img_data = res_data['data'][0]
+                        
+                        if 'b64_json' in img_data:
+                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data['b64_json']})"
+                        elif 'url' in img_data:
+                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_data['url']})"
+                        else:
+                            raise ValueError("Format gambar tidak dikenali dari API.")
+                            
+                        st.markdown(img_markdown, unsafe_allow_html=True)
+                        st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                        
+                        # Simpan ke Database
+                        if st.session_state.current_session_id is None:
+                            st.session_state.current_session_id = str(uuid.uuid4())
+                        
+                        judul_chat = generate_title_from_messages(st.session_state.messages)
+                        save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                        
+                        # Reset Uploader state
+                        st.session_state.temp_image = None
+                        st.session_state.temp_doc = None
+                        st.session_state.uploader_key += 1 
+                        
                     else:
-                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image]({img_data.url})"
-                    
-                    st.markdown(img_markdown, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": img_markdown})
-                    
-                    # Simpan ke Database
-                    if st.session_state.current_session_id is None:
-                        st.session_state.current_session_id = str(uuid.uuid4())
-                    
-                    judul_chat = generate_title_from_messages(st.session_state.messages)
-                    save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
-                    
-                    # Reset Uploader state
-                    st.session_state.temp_image = None
-                    st.session_state.temp_doc = None
-                    st.session_state.uploader_key += 1 
-                    
+                        st.error(f"Error API ({response.status_code}): {response.text}")
+                        st.session_state.messages.pop()
+                        
                 except Exception as e:
                     st.error(f"Kesalahan saat menghasilkan gambar: {str(e)}")
                     st.session_state.messages.pop()
