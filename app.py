@@ -492,44 +492,59 @@ if prompt:
         with st.chat_message("assistant"):
             with st.spinner("🎨 Lagos AI sedang menggambar (SD 3.5 Large)..."):
                 try:
-                    # Menggunakan client OpenAI bawaan yang sudah diarahkan ke BASE_URL NVIDIA
-                    client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+                    # Endpoint resmi NVIDIA untuk Stable Diffusion 3.5 Large
+                    invoke_url = "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3.5-large"
                     
-                    # Menggunakan model Stable Diffusion 3.5 Large di NVIDIA Builder
-                    response = client.images.generate(
-                        model="stable-diffusion-3.5-large", 
-                        prompt=image_prompt,
-                        n=1,
-                        size="1024x1024",
-                        response_format="b64_json"
-                    )
+                    headers = {
+                        "Authorization": f"Bearer {API_KEY}",
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    }
                     
-                    # Membaca format base64 bawaan dari response OpenAI SDK
-                    img_data = response.data[0]
+                    # Parameter resmi sesuai dokumentasi NVIDIA Builder
+                    payload = {
+                        "prompt": image_prompt,
+                        "cfg_scale": 4.5,
+                        "aspect_ratio": "1:1",
+                        "seed": 0,
+                        "steps": 40,
+                        "negative_prompt": ""
+                    }
                     
-                    if hasattr(img_data, 'b64_json') and img_data.b64_json:
-                        img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/png;base64,{img_data.b64_json})"
-                        st.markdown(img_markdown, unsafe_allow_html=True)
-                        st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                    response = requests.post(invoke_url, headers=headers, json=payload)
+                    
+                    if response.status_code == 200:
+                        res_data = response.json()
                         
-                        # Simpan ke Database
-                        if st.session_state.current_session_id is None:
-                            st.session_state.current_session_id = str(uuid.uuid4())
-                        
-                        judul_chat = generate_title_from_messages(st.session_state.messages)
-                        save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
-                        
-                        # Reset Uploader state
-                        st.session_state.temp_image = None
-                        st.session_state.temp_doc = None
-                        st.session_state.uploader_key += 1 
+                        # Mengambil data base64 gambar dari response JSON
+                        if "image" in res_data:
+                            base64_img = res_data["image"]
+                            img_markdown = f"Berikut adalah gambar untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                            
+                            st.markdown(img_markdown, unsafe_allow_html=True)
+                            st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                            
+                            # Simpan ke Database
+                            if st.session_state.current_session_id is None:
+                                st.session_state.current_session_id = str(uuid.uuid4())
+                            
+                            judul_chat = generate_title_from_messages(st.session_state.messages)
+                            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                            
+                            # Reset Uploader state
+                            st.session_state.temp_image = None
+                            st.session_state.temp_doc = None
+                            st.session_state.uploader_key += 1 
+                        else:
+                            st.error("Struktur balasan API tidak memiliki data gambar.")
+                            st.session_state.messages.pop()
+                            
                     else:
-                        st.error("Gagal memuat gambar. Format balasan dari NVIDIA tidak sesuai.")
+                        st.error(f"Gagal dari server NVIDIA ({response.status_code}): {response.text}")
                         st.session_state.messages.pop()
                         
                 except Exception as e:
-                    # Menangkap error 404 atau autentikasi jika masih terjadi
-                    st.error(f"Kesalahan saat mengakses API NVIDIA: {str(e)}")
+                    st.error(f"Kesalahan sistem saat membuat gambar: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
