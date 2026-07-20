@@ -480,7 +480,7 @@ if audio_bytes and not prompt_text:
             prompt = None
 
 if prompt:
-    # --- FITUR BARU: GENERATE GAMBAR ---
+    # --- FITUR BARU: GENERATE GAMBAR (HUGGING FACE FLUX.1-schnell) ---
     if prompt.strip().lower().startswith("/gambar "):
         image_prompt = prompt.strip()[8:].strip()
         
@@ -490,51 +490,47 @@ if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.chat_message("assistant"):
-            with st.spinner("🎨 Lagos AI sedang merender gambar..."):
+            with st.spinner("🎨 Lagos AI sedang merender gambar beresolusi tinggi..."):
                 try:
-                    import urllib.parse
-                    base64_img = ""
-                    image_url_final = ""
-                    
-                    # 1. Coba gunakan Hugging Face terlebih dahulu
                     HF_TOKEN = st.secrets.get("HF_TOKEN", "") 
-                    if HF_TOKEN:
-                        try:
-                            api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-                            headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-                            payload = {"inputs": image_prompt, "options": {"wait_for_model": True}}
-                            
-                            response = requests.post(api_url, headers=headers, json=payload, timeout=15)
-                            if response.status_code == 200:
-                                image_bytes = response.content
-                                base64_img = base64.b64encode(image_bytes).decode('utf-8')
-                        except:
-                            pass # Jika gagal terhubung/DNS error, otomatis lanjut ke cadangan
-                            
-                    # 2. Jika Hugging Face gagal (termasuk karena masalah NameResolution), gunakan Pollinations sebagai cadangan stabil
-                    if base64_img:
-                        img_markdown = f"Berikut adalah hasil render untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                    
+                    if not HF_TOKEN:
+                        st.error("Token HF_TOKEN belum dikonfigurasi di file st.secrets.")
                     else:
-                        encoded_prompt = urllib.parse.quote(image_prompt)
-                        image_url_final = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-                        img_markdown = f"Berikut adalah hasil render untuk: **{image_prompt}**\n\n![Generated Image]({image_url_final})"
+                        api_url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+                        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+                        payload = {
+                            "inputs": image_prompt,
+                            "options": {"wait_for_model": True}
+                        }
                         
-                    st.markdown(img_markdown, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": img_markdown})
-                    
-                    # Simpan ke Database
-                    if st.session_state.current_session_id is None:
-                        st.session_state.current_session_id = str(uuid.uuid4())
-                    
-                    judul_chat = generate_title_from_messages(st.session_state.messages)
-                    save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
-                    
-                    st.session_state.temp_image = None
-                    st.session_state.temp_doc = None
-                    st.session_state.uploader_key += 1 
+                        # Eksekusi langsung ke endpoint Hugging Face
+                        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+                        
+                        if response.status_code == 200:
+                            image_bytes = response.content
+                            base64_img = base64.b64encode(image_bytes).decode('utf-8')
+                            
+                            img_markdown = f"Berikut adalah hasil render untuk: **{image_prompt}**\n\n![Generated Image](data:image/jpeg;base64,{base64_img})"
+                            st.markdown(img_markdown, unsafe_allow_html=True)
+                            st.session_state.messages.append({"role": "assistant", "content": img_markdown})
+                            
+                            # Simpan ke Database
+                            if st.session_state.current_session_id is None:
+                                st.session_state.current_session_id = str(uuid.uuid4())
+                            
+                            judul_chat = generate_title_from_messages(st.session_state.messages)
+                            save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
+                            
+                            st.session_state.temp_image = None
+                            st.session_state.temp_doc = None
+                            st.session_state.uploader_key += 1 
+                        else:
+                            st.error(f"Gagal memproses dari server Hugging Face ({response.status_code}): {response.text}")
+                            st.session_state.messages.pop()
                             
                 except Exception as e:
-                    st.error(f"Kesalahan internal: {str(e)}")
+                    st.error(f"Kesalahan koneksi Python: {str(e)}")
                     st.session_state.messages.pop()
                     
     # --- FITUR STANDAR: LLM CHAT (TIDAK DIUBAH) ---
