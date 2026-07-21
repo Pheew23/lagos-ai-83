@@ -11,8 +11,9 @@ import sqlite3
 import json
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit.components.v1 as components
+import extra_streamlit_components as stx
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -21,6 +22,13 @@ st.set_page_config(
     layout="centered", 
     initial_sidebar_state="expanded"
 )
+
+# --- INIT COOKIE MANAGER ---
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
 
 # --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
 st.markdown("""
@@ -190,10 +198,17 @@ def delete_session_db(session_id):
 
 init_db()
 
-# --- 3. SISTEM AUTENTIKASI (UI FORM PROFESIONAL) ---
+# --- 3. SISTEM AUTENTIKASI DENGAN COOKIES ---
+# Cek apakah ada cookie yang tersimpan dari sesi sebelumnya
+cached_user = cookie_manager.get(cookie="lagos_username")
+
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.username = ""
+    if cached_user:
+        st.session_state.logged_in = True
+        st.session_state.username = cached_user
+    else:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
 
 if not st.session_state.logged_in:
     st.markdown('<div class="brand-title">Lagos AI 9.1</div>', unsafe_allow_html=True)
@@ -210,12 +225,18 @@ if not st.session_state.logged_in:
                 st.markdown("#### Akses Portal")
                 log_user = st.text_input("Username")
                 log_pass = st.text_input("Password", type="password")
+                keep_login = st.checkbox("Biarkan saya tetap masuk")
                 submit_login = st.form_submit_button("Masuk", use_container_width=True, type="primary")
                 
                 if submit_login:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
+                        
+                        # Set cookie jika user menceklis "Tetap Masuk" (aktif 30 hari)
+                        if keep_login:
+                            cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
+                        
                         st.rerun()
                     else:
                         st.error("Kredensial tidak valid. Silakan periksa kembali.")
@@ -324,7 +345,7 @@ with st.sidebar:
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
         
-    # Fitur Hapus hanya muncul jika sedang membuka riwayat lama (UX sangat bersih)
+    # Fitur Hapus hanya muncul jika sedang membuka riwayat lama
     if st.session_state.current_session_id is not None:
         if st.button("🗑️ Hapus Obrolan Ini", use_container_width=True):
             delete_session_db(st.session_state.current_session_id)
@@ -338,11 +359,9 @@ with st.sidebar:
     if not sessions:
         st.caption("Belum ada obrolan.")
     else:
-        # Menampilkan riwayat HANYA dengan judul penuh (tanpa tombol desak-desakan di sebelahnya)
         with st.container(height=350, border=False):
             for sess_id, title in sessions:
                 btn_type = "secondary"
-                # Beri indikasi visual jika obrolan ini sedang aktif
                 if st.session_state.current_session_id == sess_id:
                     btn_type = "primary"
                 
@@ -384,11 +403,14 @@ with st.sidebar:
     col_out, col_adm = st.columns(2)
     with col_out:
         if st.button("🚪 Keluar", use_container_width=True):
+            # Hapus cookie agar user benar-benar logout
+            cookie_manager.delete("lagos_username")
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
             st.rerun()
+            
     with col_adm:
         try:
             with open(DB_NAME, "rb") as db_file:
