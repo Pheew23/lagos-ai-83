@@ -11,9 +11,8 @@ import sqlite3
 import json
 import uuid
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 import streamlit.components.v1 as components
-import extra_streamlit_components as stx
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -23,11 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- INIT COOKIE MANAGER ---
-cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
-
 # --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
-# Dikembalikan PERSIS seperti orisinal Anda, hanya mengubah warna statis ke var()
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
@@ -66,17 +61,16 @@ st.markdown("""
         
         .file-pill {
             display: inline-block;
-            background: rgba(125, 78, 255, 0.15);
-            color: #b59bf5;
+            background: var(--secondary-background-color);
+            color: var(--text-color);
             padding: 4px 14px;
             border-radius: 20px;
             font-size: 0.8rem;
             margin-right: 8px;
             margin-bottom: 12px;
-            border: 1px solid rgba(125, 78, 255, 0.3);
+            border: 1px solid var(--border-color);
         }
 
-        /* INI KUNCI UTAMA AGAR MIC TIDAK TENGGELAM/HILANG (DIKEMBALIKAN) */
         [data-testid="stHorizontalBlock"] {
             align-items: center !important;
         }
@@ -101,13 +95,35 @@ st.markdown("""
             transform: scale(1.05) !important;
         }
         
-        .history-btn p {
-            margin: 0;
-            font-size: 0.9rem;
-            text-align: left;
+        /* --- STYLING UNTUK RIWAYAT OBROLAN SIDEBAR --- */
+        [data-testid="stSidebar"] .stButton > button {
+            border-radius: 8px !important;
+            padding: 0.5rem 1rem !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+        }
+        
+        [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button {
+            background-color: transparent !important;
+            border: 1px solid transparent !important;
+            justify-content: center !important;
+            padding: 0.5rem 0 !important;
+            color: #888888 !important;
+            transition: all 0.2s ease;
+        }
+        
+        [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button:hover {
+            border: 1px solid #ff4b4b !important;
+            color: #ff4b4b !important;
+            background-color: rgba(255, 75, 75, 0.1) !important;
+        }
+        
+        [data-testid="stSidebar"] .stButton > button p {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            width: 100%;
+            margin: 0;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -121,9 +137,15 @@ def hash_password(password):
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
+    # Tabel Pengguna
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (username TEXT PRIMARY KEY, password TEXT)''')
+    # Tabel Sesi (sekarang memiliki kolom username)
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions
+                 (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
+    # Tabel Pesan
+    c.execute('''CREATE TABLE IF NOT EXISTS messages
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
     conn.commit()
     conn.close()
 
@@ -135,7 +157,7 @@ def register_user(username, password):
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
-        success = False 
+        success = False # Username sudah ada
     conn.close()
     return success
 
@@ -152,6 +174,7 @@ def authenticate_user(username, password):
 def get_user_sessions(username):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # Hanya mengambil sesi milik username yang sedang login
     c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
     rows = c.fetchall()
     conn.close()
@@ -163,6 +186,7 @@ def load_session_messages(session_id):
     c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
     rows = c.fetchall()
     conn.close()
+    
     msgs = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
     for r, c in rows:
         try:
@@ -194,51 +218,41 @@ def delete_session_db(session_id):
 
 init_db()
 
-# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER + COOKIES AMAN) ---
-cached_user = cookie_manager.get(cookie="lagos_username")
-
-# Solusi Anti-Gagal Logout: Jika state force_logout aktif, abaikan cookie
-if st.session_state.get("force_logout", False):
-    cached_user = None
-
+# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER) ---
 if "logged_in" not in st.session_state:
-    if cached_user:
-        st.session_state.logged_in = True
-        st.session_state.username = cached_user
-    else:
-        st.session_state.logged_in = False
-        st.session_state.username = ""
+    st.session_state.logged_in = False
+    st.session_state.username = ""
 
 if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Menyesuaikan proporsi kolom agar card login tampak estetik di tengah
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        # Container Card mengikuti tema Gelap/Terang otomatis
+        # Menggunakan container dengan border sebagai "Card"
         with st.container(border=True):
             tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
             
             with tab_login:
-                log_user = st.text_input("Username", key="log_user")
-                log_pass = st.text_input("Password", type="password", key="log_pass")
-                keep_login = st.checkbox("Tetap Masuk (Remember Me)", value=True)
+                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Selamat Datang Kembali</h4>", unsafe_allow_html=True)
+                log_user = st.text_input("Username", key="log_user", placeholder="Masukkan username Anda...")
+                log_pass = st.text_input("Password", type="password", key="log_pass", placeholder="Masukkan password Anda...")
+                st.markdown("<br>", unsafe_allow_html=True)
                 
                 if st.button("Masuk", use_container_width=True, type="primary"):
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
-                        st.session_state.force_logout = False # Reset status logout
-                        
-                        if keep_login:
-                            cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
                         st.rerun()
                     else:
                         st.error("Username atau password salah!")
                         
             with tab_register:
-                reg_user = st.text_input("Username Baru", key="reg_user")
-                reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
+                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Buat Akun Baru</h4>", unsafe_allow_html=True)
+                reg_user = st.text_input("Username Baru", key="reg_user", placeholder="Pilih username unik...")
+                reg_pass = st.text_input("Password Baru", type="password", key="reg_pass", placeholder="Buat password yang kuat...")
+                st.markdown("<br>", unsafe_allow_html=True)
                 
                 if st.button("Daftar & Buat Akun", use_container_width=True):
                     if reg_user and reg_pass:
@@ -339,16 +353,19 @@ with st.sidebar:
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
 
-    st.markdown("### 🗂️ Riwayat Obrolan Anda")
+    st.markdown("### 🗂️ Riwayat Obrolan")
+    # Hanya memuat sesi milik user yang sedang login
     sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
         st.caption("Belum ada riwayat obrolan.")
     else:
-        # Dibungkus container agar rapi
+        # Membungkus daftar riwayat agar terlihat menjadi satu kesatuan rapi
         with st.container(height=350, border=False):
             for sess_id, title in sessions:
-                col_btn, col_del = st.columns([8, 2])
+                # Rasio diubah menjadi 6:1 dan gap diperkecil
+                col_btn, col_del = st.columns([6, 1], gap="small") 
+                
                 with col_btn:
                     btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
                     if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
@@ -356,7 +373,7 @@ with st.sidebar:
                         st.session_state.messages = load_session_messages(sess_id)
                         st.rerun()
                 with col_del:
-                    if st.button("🗑️", key=f"del_{sess_id}"):
+                    if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
                         delete_session_db(sess_id)
                         if st.session_state.current_session_id == sess_id:
                             st.session_state.current_session_id = None
@@ -394,9 +411,6 @@ with st.sidebar:
 
     st.divider()
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
-        # MENGGUNAKAN LOGIKA LOGOUT ANTI-GAGAL
-        cookie_manager.delete("lagos_username")
-        st.session_state.force_logout = True
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.current_session_id = None
@@ -450,7 +464,7 @@ components.html(
     height=0
 )
 
-# --- 6. AREA INPUT TERPADU (DIKEMBALIKAN PERSIS SEPERTI KODE ASLI ANDA) ---
+# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
 input_container = st.container()
 
 with input_container:
@@ -558,6 +572,7 @@ if prompt:
             
             judul_chat = generate_title_from_messages(st.session_state.messages)
             
+            # SIMPAN KE DATABASE DENGAN NAMA USER YANG SEDANG LOGIN
             save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
 
             st.session_state.temp_image = None
