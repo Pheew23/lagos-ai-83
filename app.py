@@ -23,7 +23,6 @@ st.set_page_config(
 )
 
 # --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
-# Diperbarui untuk mendukung adaptasi otomatis Light/Dark Mode
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
@@ -96,13 +95,35 @@ st.markdown("""
             transform: scale(1.05) !important;
         }
         
-        .history-btn p {
-            margin: 0;
-            font-size: 0.9rem;
-            text-align: left;
+        /* --- STYLING UNTUK RIWAYAT OBROLAN SIDEBAR --- */
+        [data-testid="stSidebar"] .stButton > button {
+            border-radius: 8px !important;
+            padding: 0.5rem 1rem !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+        }
+        
+        [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button {
+            background-color: transparent !important;
+            border: 1px solid transparent !important;
+            justify-content: center !important;
+            padding: 0.5rem 0 !important;
+            color: #888888 !important;
+            transition: all 0.2s ease;
+        }
+        
+        [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button:hover {
+            border: 1px solid #ff4b4b !important;
+            color: #ff4b4b !important;
+            background-color: rgba(255, 75, 75, 0.1) !important;
+        }
+        
+        [data-testid="stSidebar"] .stButton > button p {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            width: 100%;
+            margin: 0;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -209,7 +230,7 @@ if not st.session_state.logged_in:
     # Menyesuaikan proporsi kolom agar card login tampak estetik di tengah
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        # Menggunakan container dengan border sebagai "Card" agar menyesuaikan Mode Gelap & Terang
+        # Menggunakan container dengan border sebagai "Card"
         with st.container(border=True):
             tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
             
@@ -332,28 +353,32 @@ with st.sidebar:
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
 
-    st.markdown("### 🗂️ Riwayat Obrolan Anda")
+    st.markdown("### 🗂️ Riwayat Obrolan")
     # Hanya memuat sesi milik user yang sedang login
     sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
         st.caption("Belum ada riwayat obrolan.")
     else:
-        for sess_id, title in sessions:
-            col_btn, col_del = st.columns([8, 2])
-            with col_btn:
-                btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
-                    st.session_state.current_session_id = sess_id
-                    st.session_state.messages = load_session_messages(sess_id)
-                    st.rerun()
-            with col_del:
-                if st.button("🗑️", key=f"del_{sess_id}"):
-                    delete_session_db(sess_id)
-                    if st.session_state.current_session_id == sess_id:
-                        st.session_state.current_session_id = None
-                        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-                    st.rerun()
+        # Membungkus daftar riwayat agar terlihat menjadi satu kesatuan rapi
+        with st.container(height=350, border=False):
+            for sess_id, title in sessions:
+                # Rasio diubah menjadi 6:1 dan gap diperkecil
+                col_btn, col_del = st.columns([6, 1], gap="small") 
+                
+                with col_btn:
+                    btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
+                    if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
+                        st.session_state.current_session_id = sess_id
+                        st.session_state.messages = load_session_messages(sess_id)
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
+                        delete_session_db(sess_id)
+                        if st.session_state.current_session_id == sess_id:
+                            st.session_state.current_session_id = None
+                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+                        st.rerun()
 
     st.divider()
     
