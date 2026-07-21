@@ -23,6 +23,7 @@ st.set_page_config(
 )
 
 # --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
+# Diperbarui untuk mendukung adaptasi otomatis Light/Dark Mode
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
@@ -46,28 +47,29 @@ st.markdown("""
         }
         .header-subtitle {
             text-align: center;
-            color: #888888;
+            color: var(--text-color);
+            opacity: 0.7;
             font-size: 0.95rem;
             font-weight: 300;
             margin-bottom: 30px;
         }
         
         .stChatMessage:nth-child(even) {
-            background-color: rgba(255, 255, 255, 0.03) !important;
+            background-color: var(--secondary-background-color) !important;
             border-radius: 12px;
             padding: 1rem;
         }
         
         .file-pill {
             display: inline-block;
-            background: rgba(125, 78, 255, 0.15);
-            color: #b59bf5;
+            background: var(--secondary-background-color);
+            color: var(--text-color);
             padding: 4px 14px;
             border-radius: 20px;
             font-size: 0.8rem;
             margin-right: 8px;
             margin-bottom: 12px;
-            border: 1px solid rgba(125, 78, 255, 0.3);
+            border: 1px solid var(--border-color);
         }
 
         [data-testid="stHorizontalBlock"] {
@@ -82,7 +84,7 @@ st.markdown("""
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid var(--border-color) !important;
             background-color: transparent !important;
             transition: all 0.3s ease !important;
         }
@@ -204,32 +206,41 @@ if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Menyesuaikan proporsi kolom agar card login tampak estetik di tengah
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
-        
-        with tab_login:
-            log_user = st.text_input("Username", key="log_user")
-            log_pass = st.text_input("Password", type="password", key="log_pass")
-            if st.button("Masuk", use_container_width=True, type="primary"):
-                if authenticate_user(log_user, log_pass):
-                    st.session_state.logged_in = True
-                    st.session_state.username = log_user
-                    st.rerun()
-                else:
-                    st.error("Username atau password salah!")
-                    
-        with tab_register:
-            reg_user = st.text_input("Username Baru", key="reg_user")
-            reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
-            if st.button("Daftar & Buat Akun", use_container_width=True):
-                if reg_user and reg_pass:
-                    if register_user(reg_user, reg_pass):
-                        st.success("✅ Berhasil mendaftar! Silakan buka tab 'Masuk'.")
+        # Menggunakan container dengan border sebagai "Card" agar menyesuaikan Mode Gelap & Terang
+        with st.container(border=True):
+            tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
+            
+            with tab_login:
+                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Selamat Datang Kembali</h4>", unsafe_allow_html=True)
+                log_user = st.text_input("Username", key="log_user", placeholder="Masukkan username Anda...")
+                log_pass = st.text_input("Password", type="password", key="log_pass", placeholder="Masukkan password Anda...")
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                if st.button("Masuk", use_container_width=True, type="primary"):
+                    if authenticate_user(log_user, log_pass):
+                        st.session_state.logged_in = True
+                        st.session_state.username = log_user
+                        st.rerun()
                     else:
-                        st.error("❌ Username sudah dipakai, silakan pilih yang lain.")
-                else:
-                    st.warning("⚠️ Harap isi username dan password!")
+                        st.error("Username atau password salah!")
+                        
+            with tab_register:
+                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Buat Akun Baru</h4>", unsafe_allow_html=True)
+                reg_user = st.text_input("Username Baru", key="reg_user", placeholder="Pilih username unik...")
+                reg_pass = st.text_input("Password Baru", type="password", key="reg_pass", placeholder="Buat password yang kuat...")
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                if st.button("Daftar & Buat Akun", use_container_width=True):
+                    if reg_user and reg_pass:
+                        if register_user(reg_user, reg_pass):
+                            st.success("✅ Berhasil mendaftar! Silakan buka tab 'Masuk'.")
+                        else:
+                            st.error("❌ Username sudah dipakai, silakan pilih yang lain.")
+                    else:
+                        st.warning("⚠️ Harap isi username dan password!")
     
     st.stop() # Hentikan eksekusi kode di bawah ini jika belum login
 
