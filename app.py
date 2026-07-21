@@ -110,6 +110,35 @@ st.markdown("""
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        
+        /* --- SOLUSI ANTI-TUMPUK DI LAYAR HP (MOBILE) --- */
+        /* Memaksa baris yang memiliki chat input agar tetap horizontal (tidak patah ke bawah) */
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
+        }
+        
+        /* Kolom 1 (Klip Attachment): Lebar tetap */
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(1) {
+            flex: 0 0 50px !important;
+            width: 50px !important;
+        }
+        
+        /* Kolom 2 (Chat Input): Mengambil sisa ruang layar */
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(2) {
+            flex: 1 1 auto !important;
+            width: auto !important;
+        }
+        
+        /* Kolom 3 (Mikrofon): Lebar tetap dan posisi ke tengah */
+        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(3) {
+            flex: 0 0 50px !important;
+            width: 50px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -458,8 +487,8 @@ with input_container:
     if current_doc:
         st.markdown(f"<div class='file-indicator'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    # Perubahan Rasio Kolom dari [1, 8, 1] menjadi [2, 8, 2] agar mikrofon tidak tenggelam di HP
-    col_attach, col_input, col_mic = st.columns([2, 8, 2])
+    # Definisi kolom statis, rendering aktual diatur oleh CSS di atas agar tetap aman di HP
+    col_attach, col_input, col_mic = st.columns([1, 8, 1])
     
     with col_attach:
         with st.popover("📎"): 
