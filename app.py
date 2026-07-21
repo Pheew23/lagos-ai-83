@@ -26,7 +26,7 @@ st.set_page_config(
 # --- INIT COOKIE MANAGER ---
 cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
 
-# --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
+# --- 2. CUSTOM CSS (ANTI-TUMPUK DI HP & PROFESIONAL) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -85,7 +85,7 @@ st.markdown("""
         }
 
         /* Tombol Bulat (Popover Attachment) */
-        [data-testid="stPopover"] button {
+        [data-testid="stPopover"] > button {
             border-radius: 50% !important;
             height: 48px !important;
             width: 48px !important;
@@ -96,8 +96,9 @@ st.markdown("""
             border: 1.5px solid var(--border-color) !important;
             background-color: var(--secondary-background-color) !important;
             transition: all 0.2s ease !important;
+            font-size: 1.2rem !important;
         }
-        [data-testid="stPopover"] button:hover {
+        [data-testid="stPopover"] > button:hover {
             border-color: #7d4eff !important;
             color: #7d4eff !important;
             transform: translateY(-2px);
@@ -112,32 +113,22 @@ st.markdown("""
         }
         
         /* --- SOLUSI ANTI-TUMPUK DI LAYAR HP (MOBILE) --- */
-        /* Memaksa baris yang memiliki chat input agar tetap horizontal (tidak patah ke bawah) */
-        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) {
+        /* Memaksa baris kolom paling bawah (area input) tetap horizontal */
+        [data-testid="stHorizontalBlock"]:last-of-type {
+            flex-direction: row !important;
             flex-wrap: nowrap !important;
             align-items: center !important;
-            gap: 0.5rem !important;
         }
-        
-        /* Kolom 1 (Klip Attachment): Lebar tetap */
-        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(1) {
-            flex: 0 0 50px !important;
-            width: 50px !important;
+        /* Mengunci ukuran tombol ➕ */
+        [data-testid="stHorizontalBlock"]:last-of-type > [data-testid="column"]:first-child {
+            width: 60px !important;
+            flex: 0 0 60px !important;
+            padding-right: 0 !important;
         }
-        
-        /* Kolom 2 (Chat Input): Mengambil sisa ruang layar */
-        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(2) {
+        /* Kotak teks chat mengambil sisa layar sepenuhnya */
+        [data-testid="stHorizontalBlock"]:last-of-type > [data-testid="column"]:last-child {
+            width: calc(100% - 60px) !important;
             flex: 1 1 auto !important;
-            width: auto !important;
-        }
-        
-        /* Kolom 3 (Mikrofon): Lebar tetap dan posisi ke tengah */
-        div[data-testid="stHorizontalBlock"]:has([data-testid="stChatInput"]) > div[data-testid="column"]:nth-child(3) {
-            flex: 0 0 50px !important;
-            width: 50px !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -222,10 +213,24 @@ def delete_session_db(session_id):
     conn.commit()
     conn.close()
 
+# --- FUNGSI LOGOUT (CALLBACK) ---
+# Menjamin penghapusan sesi sepenuhnya sebelum layar dimuat ulang
+def proses_logout():
+    cookie_manager.delete("lagos_username")
+    st.session_state.ignore_cookie = True
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.current_session_id = None
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+
 init_db()
 
 # --- 3. SISTEM AUTENTIKASI DENGAN COOKIES ---
 cached_user = cookie_manager.get(cookie="lagos_username")
+
+# Abaikan cookie jika user baru saja logout secara manual
+if st.session_state.get("ignore_cookie", False):
+    cached_user = None
 
 if "logged_in" not in st.session_state:
     if cached_user:
@@ -256,6 +261,7 @@ if not st.session_state.logged_in:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
+                        st.session_state.ignore_cookie = False # Reset status abaikan cookie
                         
                         if keep_login:
                             cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
@@ -423,13 +429,8 @@ with st.sidebar:
     st.divider()
     col_out, col_adm = st.columns(2)
     with col_out:
-        if st.button("🚪 Keluar", use_container_width=True):
-            cookie_manager.delete("lagos_username")
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-            st.rerun()
+        # Panggilan fungsi callback on_click untuk logout agar 100% jalan di semua perangkat
+        st.button("🚪 Keluar", use_container_width=True, on_click=proses_logout)
             
     with col_adm:
         try:
@@ -475,7 +476,7 @@ components.html(
     height=0
 )
 
-# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
+# --- 6. AREA INPUT TERPADU (UI MOBILE-FRIENDLY) ---
 input_container = st.container()
 
 with input_container:
@@ -483,16 +484,28 @@ with input_container:
     current_doc = st.session_state.get(f"doc_{st.session_state.uploader_key}")
 
     if current_img:
-        st.markdown(f"<div class='file-indicator'>📸 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-indicator'>📸 Gambar dilampirkan</div>", unsafe_allow_html=True)
     if current_doc:
-        st.markdown(f"<div class='file-indicator'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-indicator'>📄 Dokumen dilampirkan</div>", unsafe_allow_html=True)
 
-    # Definisi kolom statis, rendering aktual diatur oleh CSS di atas agar tetap aman di HP
-    col_attach, col_input, col_mic = st.columns([1, 8, 1])
+    # Layout diubah menjadi 2 kolom: Tombol Menu (Kiri) dan Chat Input (Kanan)
+    col_attach, col_input = st.columns([1, 6])
     
     with col_attach:
-        with st.popover("📎"): 
-            st.markdown("**Lampirkan File**")
+        with st.popover("➕", help="Lampirkan File & Rekam Suara"): 
+            st.markdown("**🎙️ Rekam Suara**")
+            audio_bytes = audio_recorder(
+                text="Klik untuk bicara", 
+                recording_color="#ff4b4b",
+                neutral_color="#888888", 
+                icon_name="microphone", 
+                icon_size="1.8x",
+                key=f"mic_{st.session_state.uploader_key}"
+            )
+            
+            st.divider()
+            
+            st.markdown("**📎 Lampirkan File**")
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
             st.session_state.temp_image = up_img
@@ -500,16 +513,6 @@ with input_container:
 
     with col_input:
         prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI...")
-
-    with col_mic:
-        audio_bytes = audio_recorder(
-            text="", 
-            recording_color="#ff4b4b",
-            neutral_color="#888888", 
-            icon_name="microphone", 
-            icon_size="1.8x",
-            key=f"mic_{st.session_state.uploader_key}"
-        )
 
 # --- 7. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
 prompt = prompt_text
