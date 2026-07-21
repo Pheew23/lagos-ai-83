@@ -26,7 +26,7 @@ st.set_page_config(
 # --- INIT COOKIE MANAGER ---
 cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
 
-# --- 2. CUSTOM CSS (ANTI-TUMPUK DI HP & PROFESIONAL) ---
+# --- 2. CUSTOM CSS (HANYA WARNA & FONT, TANPA MENGUBAH LAYOUT) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -84,7 +84,7 @@ st.markdown("""
             border: 1px solid rgba(125, 78, 255, 0.2);
         }
 
-        /* Tombol Bulat (Popover Attachment) */
+        /* Tombol Popover Attachment (Klip) */
         [data-testid="stPopover"] > button {
             border-radius: 50% !important;
             height: 48px !important;
@@ -94,15 +94,13 @@ st.markdown("""
             justify-content: center !important;
             align-items: center !important;
             border: 1.5px solid var(--border-color) !important;
-            background-color: var(--secondary-background-color) !important;
+            background-color: transparent !important;
             transition: all 0.2s ease !important;
-            font-size: 1.2rem !important;
         }
         [data-testid="stPopover"] > button:hover {
             border-color: #7d4eff !important;
+            background-color: rgba(125, 78, 255, 0.1) !important;
             color: #7d4eff !important;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(125, 78, 255, 0.15);
         }
         
         /* Merapikan tulisan pada tombol sidebar agar tidak menabrak batas */
@@ -110,25 +108,6 @@ st.markdown("""
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-        }
-        
-        /* --- SOLUSI ANTI-TUMPUK DI LAYAR HP (MOBILE) --- */
-        /* Memaksa baris kolom paling bawah (area input) tetap horizontal */
-        [data-testid="stHorizontalBlock"]:last-of-type {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-        }
-        /* Mengunci ukuran tombol ➕ */
-        [data-testid="stHorizontalBlock"]:last-of-type > [data-testid="column"]:first-child {
-            width: 60px !important;
-            flex: 0 0 60px !important;
-            padding-right: 0 !important;
-        }
-        /* Kotak teks chat mengambil sisa layar sepenuhnya */
-        [data-testid="stHorizontalBlock"]:last-of-type > [data-testid="column"]:last-child {
-            width: calc(100% - 60px) !important;
-            flex: 1 1 auto !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -213,23 +192,13 @@ def delete_session_db(session_id):
     conn.commit()
     conn.close()
 
-# --- FUNGSI LOGOUT (CALLBACK) ---
-# Menjamin penghapusan sesi sepenuhnya sebelum layar dimuat ulang
-def proses_logout():
-    cookie_manager.delete("lagos_username")
-    st.session_state.ignore_cookie = True
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.session_state.current_session_id = None
-    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-
 init_db()
 
-# --- 3. SISTEM AUTENTIKASI DENGAN COOKIES ---
+# --- 3. SISTEM AUTENTIKASI DENGAN COOKIES YANG AMAN ---
 cached_user = cookie_manager.get(cookie="lagos_username")
 
-# Abaikan cookie jika user baru saja logout secara manual
-if st.session_state.get("ignore_cookie", False):
+# Memutus siklus login otomatis jika user baru saja menekan tombol logout
+if st.session_state.get("just_logged_out", False):
     cached_user = None
 
 if "logged_in" not in st.session_state:
@@ -261,7 +230,7 @@ if not st.session_state.logged_in:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
-                        st.session_state.ignore_cookie = False # Reset status abaikan cookie
+                        st.session_state.just_logged_out = False # Reset flag
                         
                         if keep_login:
                             cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
@@ -429,8 +398,15 @@ with st.sidebar:
     st.divider()
     col_out, col_adm = st.columns(2)
     with col_out:
-        # Panggilan fungsi callback on_click untuk logout agar 100% jalan di semua perangkat
-        st.button("🚪 Keluar", use_container_width=True, on_click=proses_logout)
+        if st.button("🚪 Keluar", use_container_width=True):
+            # Perbaikan logika logout agar terhapus sempurna
+            cookie_manager.delete("lagos_username")
+            st.session_state.just_logged_out = True
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.current_session_id = None
+            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+            st.rerun()
             
     with col_adm:
         try:
@@ -476,7 +452,7 @@ components.html(
     height=0
 )
 
-# --- 6. AREA INPUT TERPADU (UI MOBILE-FRIENDLY) ---
+# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE DIKEMBALIKAN SEPERTI AWAL) ---
 input_container = st.container()
 
 with input_container:
@@ -484,28 +460,16 @@ with input_container:
     current_doc = st.session_state.get(f"doc_{st.session_state.uploader_key}")
 
     if current_img:
-        st.markdown(f"<div class='file-indicator'>📸 Gambar dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-indicator'>📸 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
     if current_doc:
-        st.markdown(f"<div class='file-indicator'>📄 Dokumen dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-indicator'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    # Layout diubah menjadi 2 kolom: Tombol Menu (Kiri) dan Chat Input (Kanan)
-    col_attach, col_input = st.columns([1, 6])
+    # Dikembalikan persis ke logika orisinal milik Anda
+    col_attach, col_input, col_mic = st.columns([1, 8, 1])
     
     with col_attach:
-        with st.popover("➕", help="Lampirkan File & Rekam Suara"): 
-            st.markdown("**🎙️ Rekam Suara**")
-            audio_bytes = audio_recorder(
-                text="Klik untuk bicara", 
-                recording_color="#ff4b4b",
-                neutral_color="#888888", 
-                icon_name="microphone", 
-                icon_size="1.8x",
-                key=f"mic_{st.session_state.uploader_key}"
-            )
-            
-            st.divider()
-            
-            st.markdown("**📎 Lampirkan File**")
+        with st.popover("📎"): 
+            st.markdown("**Lampirkan File**")
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
             st.session_state.temp_image = up_img
@@ -513,6 +477,16 @@ with input_container:
 
     with col_input:
         prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI...")
+
+    with col_mic:
+        audio_bytes = audio_recorder(
+            text="", 
+            recording_color="#ff4b4b",
+            neutral_color="#888888", 
+            icon_name="microphone", 
+            icon_size="1.8x",
+            key=f"mic_{st.session_state.uploader_key}"
+        )
 
 # --- 7. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
 prompt = prompt_text
