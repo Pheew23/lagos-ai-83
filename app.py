@@ -11,96 +11,100 @@ import sqlite3
 import json
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit.components.v1 as components
+import extra_streamlit_components as stx
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="Lagos AI 9.1 | Premium",
+    page_title="Lagos AI 9.1 | Premium Chat",
     page_icon="🔮",
     layout="centered", 
     initial_sidebar_state="expanded"
 )
 
-# --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
+# --- INIT COOKIE MANAGER ---
+cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
+
+# --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
+# Dikembalikan PERSIS seperti orisinal Anda, hanya mengubah warna statis ke var()
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
 
         html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
         }
-        
-        #MainMenu, footer, header {visibility: hidden;}
 
-        /* Tipografi Header */
-        .brand-title {
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        .header-title {
             text-align: center;
-            font-size: 2.5rem;
+            font-size: 2.2rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #7d4eff 0%, #00d2ff 100%);
+            background: linear-gradient(90deg, #7d4eff, #00d2ff);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 0.2rem;
-            padding-top: 1rem;
+            margin-bottom: 0px;
+            padding-top: 10px;
         }
-        .brand-subtitle {
+        .header-subtitle {
             text-align: center;
             color: var(--text-color);
-            opacity: 0.6;
-            font-size: 1rem;
-            font-weight: 400;
-            margin-bottom: 2.5rem;
+            opacity: 0.7;
+            font-size: 0.95rem;
+            font-weight: 300;
+            margin-bottom: 30px;
         }
-
-        /* Tampilan Bubble Chat */
-        .stChatMessage {
-            padding: 1.5rem !important;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-        }
+        
         .stChatMessage:nth-child(even) {
             background-color: var(--secondary-background-color) !important;
-            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        
+        .file-pill {
+            display: inline-block;
+            background: rgba(125, 78, 255, 0.15);
+            color: #b59bf5;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-right: 8px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(125, 78, 255, 0.3);
         }
 
-        /* Tampilan Pill (Indikator File) */
-        .file-indicator {
-            display: inline-flex;
-            align-items: center;
-            background: rgba(125, 78, 255, 0.1);
-            color: #7d4eff;
-            padding: 6px 16px;
-            border-radius: 50px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-right: 10px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(125, 78, 255, 0.2);
+        /* INI KUNCI UTAMA AGAR MIC TIDAK TENGGELAM/HILANG (DIKEMBALIKAN) */
+        [data-testid="stHorizontalBlock"] {
+            align-items: center !important;
         }
 
-        /* Tombol Bulat (Popover Attachment) */
         [data-testid="stPopover"] button {
             border-radius: 50% !important;
-            height: 52px !important;
-            width: 52px !important;
+            height: 48px !important;
+            width: 48px !important;
             padding: 0 !important;
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            border: 1.5px solid var(--border-color) !important;
-            background-color: var(--secondary-background-color) !important;
-            transition: all 0.2s ease !important;
-        }
-        [data-testid="stPopover"] button:hover {
-            border-color: #7d4eff !important;
-            color: #7d4eff !important;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(125, 78, 255, 0.15);
+            border: 1px solid var(--border-color) !important;
+            background-color: transparent !important;
+            transition: all 0.3s ease !important;
         }
         
-        /* Merapikan tulisan pada tombol sidebar agar tidak menabrak batas */
-        [data-testid="stSidebar"] button p {
+        [data-testid="stPopover"] button:hover {
+            border-color: #7d4eff !important;
+            background-color: rgba(125, 78, 255, 0.1) !important;
+            color: #7d4eff !important;
+            transform: scale(1.05) !important;
+        }
+        
+        .history-btn p {
+            margin: 0;
+            font-size: 0.9rem;
+            text-align: left;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -190,56 +194,65 @@ def delete_session_db(session_id):
 
 init_db()
 
-# --- 3. SISTEM AUTENTIKASI (UI FORM PROFESIONAL) ---
+# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER + COOKIES AMAN) ---
+cached_user = cookie_manager.get(cookie="lagos_username")
+
+# Solusi Anti-Gagal Logout: Jika state force_logout aktif, abaikan cookie
+if st.session_state.get("force_logout", False):
+    cached_user = None
+
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.username = ""
+    if cached_user:
+        st.session_state.logged_in = True
+        st.session_state.username = cached_user
+    else:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
 
 if not st.session_state.logged_in:
-    st.markdown('<div class="brand-title">Lagos AI 9.1</div>', unsafe_allow_html=True)
-    st.markdown('<div class="brand-subtitle">Platform Asisten Analitik Multimodal</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
     
-    # Layout pembagian untuk meletakkan form di tengah
-    _, col_form, _ = st.columns([1, 1.2, 1])
-    
-    with col_form:
-        auth_mode = st.radio("Mode Akses", ["Masuk ke Akun", "Daftar Akun Baru"], horizontal=True, label_visibility="collapsed")
-        
-        if auth_mode == "Masuk ke Akun":
-            with st.form("login_form"):
-                st.markdown("#### Akses Portal")
-                log_user = st.text_input("Username")
-                log_pass = st.text_input("Password", type="password")
-                submit_login = st.form_submit_button("Masuk", use_container_width=True, type="primary")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # Container Card mengikuti tema Gelap/Terang otomatis
+        with st.container(border=True):
+            tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
+            
+            with tab_login:
+                log_user = st.text_input("Username", key="log_user")
+                log_pass = st.text_input("Password", type="password", key="log_pass")
+                keep_login = st.checkbox("Tetap Masuk (Remember Me)", value=True)
                 
-                if submit_login:
+                if st.button("Masuk", use_container_width=True, type="primary"):
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
+                        st.session_state.force_logout = False # Reset status logout
+                        
+                        if keep_login:
+                            cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
                         st.rerun()
                     else:
-                        st.error("Kredensial tidak valid. Silakan periksa kembali.")
+                        st.error("Username atau password salah!")
                         
-        else:
-            with st.form("register_form"):
-                st.markdown("#### Pendaftaran Akun")
-                reg_user = st.text_input("Pilih Username")
-                reg_pass = st.text_input("Buat Password", type="password")
-                submit_register = st.form_submit_button("Daftar Sekarang", use_container_width=True)
+            with tab_register:
+                reg_user = st.text_input("Username Baru", key="reg_user")
+                reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
                 
-                if submit_register:
+                if st.button("Daftar & Buat Akun", use_container_width=True):
                     if reg_user and reg_pass:
                         if register_user(reg_user, reg_pass):
-                            st.success("Registrasi berhasil! Silakan pilih 'Masuk ke Akun'.")
+                            st.success("✅ Berhasil mendaftar! Silakan buka tab 'Masuk'.")
                         else:
-                            st.error("Username ini sudah digunakan.")
+                            st.error("❌ Username sudah dipakai, silakan pilih yang lain.")
                     else:
-                        st.warning("Username dan Password wajib diisi.")
+                        st.warning("⚠️ Harap isi username dan password!")
     
-    st.stop() # Blok eksekusi berlanjut jika belum login
+    st.stop() # Hentikan eksekusi kode di bawah ini jika belum login
 
 # ==========================================
-# KODE BERJALAN SETELAH LOGIN SUKSES
+# KODE DI BAWAH INI HANYA JALAN JIKA SUDAH LOGIN
 # ==========================================
 
 # --- KONFIGURASI API ---
@@ -313,53 +326,52 @@ if "temp_doc" not in st.session_state:
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SIDEBAR (UI MANAJEMEN YANG BERSIH) ---
+# --- BRANDING UTAMA ---
+st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
+
+# --- SIDEBAR (FITUR HISTORY SPESIFIK USER) ---
 with st.sidebar:
-    st.markdown(f"Masuk sebagai: **{st.session_state.username}**")
-    st.divider()
+    st.success(f"👤 Login sebagai: **{st.session_state.username}**")
     
-    # Tombol utama untuk aksi prioritas
-    if st.button("➕ Obrolan Baru", use_container_width=True, type="primary"):
+    if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
-        
-    # Fitur Hapus hanya muncul jika sedang membuka riwayat lama (UX sangat bersih)
-    if st.session_state.current_session_id is not None:
-        if st.button("🗑️ Hapus Obrolan Ini", use_container_width=True):
-            delete_session_db(st.session_state.current_session_id)
-            st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-            st.rerun()
 
-    st.markdown("### Riwayat Anda")
+    st.markdown("### 🗂️ Riwayat Obrolan Anda")
     sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
-        st.caption("Belum ada obrolan.")
+        st.caption("Belum ada riwayat obrolan.")
     else:
-        # Menampilkan riwayat HANYA dengan judul penuh (tanpa tombol desak-desakan di sebelahnya)
+        # Dibungkus container agar rapi
         with st.container(height=350, border=False):
             for sess_id, title in sessions:
-                btn_type = "secondary"
-                # Beri indikasi visual jika obrolan ini sedang aktif
-                if st.session_state.current_session_id == sess_id:
-                    btn_type = "primary"
-                
-                if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
-                    st.session_state.current_session_id = sess_id
-                    st.session_state.messages = load_session_messages(sess_id)
-                    st.rerun()
+                col_btn, col_del = st.columns([8, 2])
+                with col_btn:
+                    btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
+                    if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
+                        st.session_state.current_session_id = sess_id
+                        st.session_state.messages = load_session_messages(sess_id)
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑️", key=f"del_{sess_id}"):
+                        delete_session_db(sess_id)
+                        if st.session_state.current_session_id == sess_id:
+                            st.session_state.current_session_id = None
+                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+                        st.rerun()
 
     st.divider()
     
-    st.markdown("### Pengaturan Engine")
+    st.markdown("### 🧠 Pilih Model AI")
     MODEL_MAPPING = {
-        "openai/gpt-oss-120b": "Kecepatan Tinggi (Teks)",
-        "thinkingmachines/inkling": "Optimal Standar (Teks)",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "Analisis Mendalam",
-        "google/diffusiongemma-26b-a4b-it": "Stabil & Presisi",
-        "mistralai/mistral-large-3-675b-instruct-2512": "Projek Khusus"
+        "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
+        "thinkingmachines/inkling": "2. Cepat(text only)",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Analisis Mendalam",
+        "google/diffusiongemma-26b-a4b-it": "4. Stabil",
+        "mistralai/mistral-large-3-675b-instruct-2512": "5. Projek Khusus"
     }
     
     MODEL_NAME = st.selectbox(
@@ -373,7 +385,7 @@ with st.sidebar:
     if len(st.session_state.messages) > 1:
         file_word = buat_file_word(st.session_state.messages)
         st.download_button(
-            label="📥 Unduh Laporan DOCX",
+            label="📥 Unduh Laporan (.DOCX)",
             data=file_word,
             file_name="Lagos_AI_9.1_Report.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -381,28 +393,32 @@ with st.sidebar:
         )
 
     st.divider()
-    col_out, col_adm = st.columns(2)
-    with col_out:
-        if st.button("🚪 Keluar", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-            st.rerun()
-    with col_adm:
-        try:
-            with open(DB_NAME, "rb") as db_file:
-                st.download_button("⚙️ DB", data=db_file, file_name="lagos_multiuser.db", mime="application/octet-stream", use_container_width=True, help="Download Database (Admin)")
-        except FileNotFoundError:
-            st.button("⚙️ DB", disabled=True, use_container_width=True)
-
-# --- BRANDING UTAMA DI HALAMAN CHAT ---
-st.markdown('<div class="brand-title">Lagos AI 9.1</div>', unsafe_allow_html=True)
-st.markdown('<div class="brand-subtitle">Siap membantu menganalisis dokumen dan gambar.</div>', unsafe_allow_html=True)
+    if st.button("🚪 Keluar (Logout)", use_container_width=True):
+        # MENGGUNAKAN LOGIKA LOGOUT ANTI-GAGAL
+        cookie_manager.delete("lagos_username")
+        st.session_state.force_logout = True
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.current_session_id = None
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        st.rerun()
+        
+    st.markdown("### 🛠️ Admin Panel")
+    try:
+        with open(DB_NAME, "rb") as db_file:
+            st.download_button(
+                label="📦 Download Database (Admin)",
+                data=db_file,
+                file_name="lagos_multiuser.db",
+                mime="application/octet-stream",
+                use_container_width=True
+            )
+    except FileNotFoundError:
+        pass
 
 # --- 5. AREA OBROLAN UTAMA ---
 if len(st.session_state.messages) == 1:
-    st.info("Ketik pertanyaan, rekam suara, atau lampirkan dokumen/gambar di bawah ini untuk memulai analisis.")
+    st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
 for message in st.session_state.messages:
     if message["role"] == "system": continue
@@ -415,6 +431,7 @@ st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
 # --- SKRIP AUTO-SCROLL KE BAWAH ---
 st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
+
 components.html(
     """
     <script>
@@ -433,7 +450,7 @@ components.html(
     height=0
 )
 
-# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
+# --- 6. AREA INPUT TERPADU (DIKEMBALIKAN PERSIS SEPERTI KODE ASLI ANDA) ---
 input_container = st.container()
 
 with input_container:
@@ -441,14 +458,14 @@ with input_container:
     current_doc = st.session_state.get(f"doc_{st.session_state.uploader_key}")
 
     if current_img:
-        st.markdown(f"<div class='file-indicator'>📸 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
     if current_doc:
-        st.markdown(f"<div class='file-indicator'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
     col_attach, col_input, col_mic = st.columns([1, 8, 1])
     
     with col_attach:
-        with st.popover("📎"): 
+        with st.popover("➕"): 
             st.markdown("**Lampirkan File**")
             up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{st.session_state.uploader_key}")
             up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{st.session_state.uploader_key}")
@@ -456,7 +473,7 @@ with input_container:
             st.session_state.temp_doc = up_doc
 
     with col_input:
-        prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI...")
+        prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
 
     with col_mic:
         audio_bytes = audio_recorder(
@@ -472,7 +489,7 @@ with input_container:
 prompt = prompt_text
 
 if audio_bytes and not prompt_text:
-    with st.spinner("Memproses suara..."):
+    with st.spinner("Menerjemahkan suara..."):
         r = sr.Recognizer()
         try:
             with io.BytesIO(audio_bytes) as source_bytes:
@@ -483,13 +500,13 @@ if audio_bytes and not prompt_text:
             st.warning("Suara tidak terdengar jelas. Silakan coba lagi.")
             prompt = None
         except Exception as e:
-            st.error(f"Gagal memproses suara: {e}")
+            st.error(f"Sistem gagal memproses suara: {e}")
             prompt = None
 
 if prompt:
     teks_dokumen = ""
     if st.session_state.temp_doc:
-        with st.spinner("Mengekstrak teks dokumen..."):
+        with st.spinner("Membaca referensi dokumen..."):
             teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
         if teks_dokumen:
             teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
@@ -541,7 +558,6 @@ if prompt:
             
             judul_chat = generate_title_from_messages(st.session_state.messages)
             
-            # SIMPAN KE DATABASE
             save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
 
             st.session_state.temp_image = None
