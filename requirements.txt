@@ -6,3 +6,4 @@ streamlit-lottie
 audio-recorder-streamlit
 SpeechRecognition
 requests
+extra-streamlit-components
