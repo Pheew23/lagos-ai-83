@@ -100,7 +100,7 @@ st.markdown("""
         
         /* Merapikan tulisan pada tombol sidebar agar tidak menabrak batas */
         [data-testid="stSidebar"] button p {
-            overflow: hidden;
+            overflow: nohidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
