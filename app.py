@@ -24,7 +24,6 @@ st.set_page_config(
 )
 
 # --- INIT COOKIE MANAGER ---
-# Langsung dipanggil tanpa fungsi cache agar terhindar dari CachedWidgetWarning
 cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
 
 # --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
@@ -36,7 +35,8 @@ st.markdown("""
             font-family: 'Inter', sans-serif;
         }
         
-        #MainMenu, footer, header {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
 
         /* Tipografi Header */
         .brand-title {
@@ -87,8 +87,8 @@ st.markdown("""
         /* Tombol Bulat (Popover Attachment) */
         [data-testid="stPopover"] button {
             border-radius: 50% !important;
-            height: 52px !important;
-            width: 52px !important;
+            height: 48px !important;
+            width: 48px !important;
             padding: 0 !important;
             display: flex !important;
             justify-content: center !important;
@@ -196,7 +196,6 @@ def delete_session_db(session_id):
 init_db()
 
 # --- 3. SISTEM AUTENTIKASI DENGAN COOKIES ---
-# Cek apakah ada cookie yang tersimpan dari sesi sebelumnya
 cached_user = cookie_manager.get(cookie="lagos_username")
 
 if "logged_in" not in st.session_state:
@@ -211,7 +210,6 @@ if not st.session_state.logged_in:
     st.markdown('<div class="brand-title">Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="brand-subtitle">Platform Asisten Analitik Multimodal</div>', unsafe_allow_html=True)
     
-    # Layout pembagian untuk meletakkan form di tengah
     _, col_form, _ = st.columns([1, 1.2, 1])
     
     with col_form:
@@ -230,7 +228,6 @@ if not st.session_state.logged_in:
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
                         
-                        # Set cookie jika user menceklis "Tetap Masuk" (aktif 30 hari)
                         if keep_login:
                             cookie_manager.set("lagos_username", log_user, expires_at=datetime.now() + timedelta(days=30))
                         
@@ -254,7 +251,7 @@ if not st.session_state.logged_in:
                     else:
                         st.warning("Username dan Password wajib diisi.")
     
-    st.stop() # Blok eksekusi berlanjut jika belum login
+    st.stop() 
 
 # ==========================================
 # KODE BERJALAN SETELAH LOGIN SUKSES
@@ -336,13 +333,11 @@ with st.sidebar:
     st.markdown(f"Masuk sebagai: **{st.session_state.username}**")
     st.divider()
     
-    # Tombol utama untuk aksi prioritas
     if st.button("➕ Obrolan Baru", use_container_width=True, type="primary"):
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
         
-    # Fitur Hapus hanya muncul jika sedang membuka riwayat lama
     if st.session_state.current_session_id is not None:
         if st.button("🗑️ Hapus Obrolan Ini", use_container_width=True):
             delete_session_db(st.session_state.current_session_id)
@@ -400,7 +395,6 @@ with st.sidebar:
     col_out, col_adm = st.columns(2)
     with col_out:
         if st.button("🚪 Keluar", use_container_width=True):
-            # Hapus cookie agar user benar-benar logout
             cookie_manager.delete("lagos_username")
             st.session_state.logged_in = False
             st.session_state.username = ""
@@ -464,7 +458,8 @@ with input_container:
     if current_doc:
         st.markdown(f"<div class='file-indicator'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
-    col_attach, col_input, col_mic = st.columns([1, 8, 1])
+    # Perubahan Rasio Kolom dari [1, 8, 1] menjadi [2, 8, 2] agar mikrofon tidak tenggelam di HP
+    col_attach, col_input, col_mic = st.columns([2, 8, 2])
     
     with col_attach:
         with st.popover("📎"): 
