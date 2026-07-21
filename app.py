@@ -24,6 +24,7 @@ st.set_page_config(
 )
 
 # --- INIT COOKIE MANAGER ---
+# Parameter experimental_allow_widgets dihapus agar tidak error di versi Streamlit terbaru
 @st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager()
