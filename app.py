@@ -24,12 +24,8 @@ st.set_page_config(
 )
 
 # --- INIT COOKIE MANAGER ---
-# Parameter experimental_allow_widgets dihapus agar tidak error di versi Streamlit terbaru
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# Langsung dipanggil tanpa fungsi cache agar terhindar dari CachedWidgetWarning
+cookie_manager = stx.CookieManager(key="lagos_cookie_manager")
 
 # --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
 st.markdown("""
