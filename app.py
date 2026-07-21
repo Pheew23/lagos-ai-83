@@ -19,7 +19,6 @@ st.set_page_config(
     page_title="Lagos AI 9.1 | Premium",
     page_icon="🔮",
     layout="centered", 
-    initial_sidebar_state="expanded"
 )
 
 # --- 2. CUSTOM CSS (MINIMALIS & PROFESIONAL) ---
