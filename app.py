@@ -103,7 +103,7 @@ st.markdown("""
         [data-testid="stSidebar"] button p {
             overflow: show;
             text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: wrap;
         }
     </style>
 """, unsafe_allow_html=True)
