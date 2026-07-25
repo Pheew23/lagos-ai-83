@@ -1,4 +1,5 @@
 import streamlit as st
+import extra_streamlit_components as stx
 from openai import OpenAI
 import io
 import re
@@ -13,8 +14,8 @@ import uuid
 import hashlib
 from datetime import datetime
 import streamlit.components.v1 as components
-from bs4 import BeautifulSoup # TAMBAHAN: Untuk parsing HTML
-import extra_streamlit_components as stx
+from bs4 import BeautifulSoup 
+import time
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -97,7 +98,6 @@ st.markdown("""
             transform: scale(1.05) !important;
         }
         
-        /* --- STYLING UNTUK RIWAYAT OBROLAN SIDEBAR --- */
         [data-testid="stSidebar"] .stButton > button {
             border-radius: 8px !important;
             padding: 0.5rem 1rem !important;
@@ -130,6 +130,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- PENGELOLA COOKIE ---
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager(key="cookie_manager")
+
+cookie_manager = get_cookie_manager()
+
 # --- FUNGSI DATABASE MULTI-USER ---
 DB_NAME = 'lagos_multiuser.db'
 
@@ -139,15 +146,9 @@ def hash_password(password):
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Tabel Pengguna
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (username TEXT PRIMARY KEY, password TEXT)''')
-    # Tabel Sesi (sekarang memiliki kolom username)
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions
-                 (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
-    # Tabel Pesan
-    c.execute('''CREATE TABLE IF NOT EXISTS messages
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
     conn.commit()
     conn.close()
 
@@ -159,7 +160,7 @@ def register_user(username, password):
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
-        success = False # Username sudah ada
+        success = False 
     conn.close()
     return success
 
@@ -176,7 +177,6 @@ def authenticate_user(username, password):
 def get_user_sessions(username):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Hanya mengambil sesi milik username yang sedang login
     c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
     rows = c.fetchall()
     conn.close()
@@ -220,19 +220,27 @@ def delete_session_db(session_id):
 
 init_db()
 
-# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER) ---
+# --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER DENGAN COOKIES) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
+
+# Membaca Cookie yang tersimpan
+cookie_logged_in = cookie_manager.get("is_logged_in")
+cookie_username = cookie_manager.get("saved_username")
+
+# Auto-login jika cookie valid dan session belum login (misal setelah refresh)
+if cookie_logged_in == "True" and not st.session_state.logged_in:
+    st.session_state.logged_in = True
+    st.session_state.username = cookie_username
+    st.rerun()
 
 if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
     
-    # Menyesuaikan proporsi kolom agar card login tampak estetik di tengah
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        # Menggunakan container dengan border sebagai "Card"
         with st.container(border=True):
             tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
             
@@ -246,6 +254,12 @@ if not st.session_state.logged_in:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
+                        
+                        # Set Cookies (Bisa bertahan meski halaman di-refresh)
+                        cookie_manager.set("is_logged_in", "True", key="set_cookie_login")
+                        cookie_manager.set("saved_username", log_user, key="set_cookie_user")
+                        
+                        time.sleep(0.5) # Jeda sedikit agar cookie sempat tersimpan ke browser
                         st.rerun()
                     else:
                         st.error("Username atau password salah!")
@@ -265,7 +279,7 @@ if not st.session_state.logged_in:
                     else:
                         st.warning("⚠️ Harap isi username dan password!")
     
-    st.stop() # Hentikan eksekusi kode di bawah ini jika belum login
+    st.stop() # Hentikan eksekusi jika belum login
 
 # ==========================================
 # KODE DI BAWAH INI HANYA JALAN JIKA SUDAH LOGIN
@@ -330,7 +344,6 @@ def generate_title_from_messages(messages):
             return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
     return "Obrolan Baru"
 
-# --- TAMBAHAN: FUNGSI MEMBACA LINK ---
 def ambil_teks_dari_link(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'} 
@@ -338,12 +351,8 @@ def ambil_teks_dari_link(url):
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Mengambil isi dari tag paragraf
         paragraphs = soup.find_all('p')
         text = ' '.join([p.get_text() for p in paragraphs])
-        
-        # Membersihkan spasi berlebih
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
     except Exception as e:
@@ -375,16 +384,13 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("### 🗂️ Riwayat Obrolan")
-    # Hanya memuat sesi milik user yang sedang login
     sessions = get_user_sessions(st.session_state.username)
     
     if not sessions:
         st.caption("Belum ada riwayat obrolan.")
     else:
-        # Membungkus daftar riwayat agar terlihat menjadi satu kesatuan rapi
         with st.container(height=350, border=False):
             for sess_id, title in sessions:
-                # Rasio diubah menjadi 6:1 dan gap diperkecil
                 col_btn, col_del = st.columns([6, 1], gap="small") 
                 
                 with col_btn:
@@ -431,11 +437,18 @@ with st.sidebar:
         )
 
     st.divider()
+    
+    # TOMBOL LOGOUT SEKALIGUS MENGHAPUS COOKIE
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        
+        cookie_manager.delete("is_logged_in", key="delete_cookie_login")
+        cookie_manager.delete("saved_username", key="delete_cookie_user")
+        
+        time.sleep(0.5)
         st.rerun()
         
     st.markdown("### 🛠️ Admin Panel")
@@ -464,7 +477,6 @@ for message in st.session_state.messages:
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
 
-# --- SKRIP AUTO-SCROLL KE BAWAH ---
 st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
 
 components.html(
@@ -485,7 +497,7 @@ components.html(
     height=0
 )
 
-# --- 6. AREA INPUT TERPADU (UI GEMINI-STYLE) ---
+# --- 6. AREA INPUT TERPADU ---
 input_container = st.container()
 
 with input_container:
@@ -520,7 +532,7 @@ with input_container:
             key=f"mic_{st.session_state.uploader_key}"
         )
 
-# --- 7. LOGIKA PEMROSESAN & TRANSLASI SUARA ---
+# --- 7. LOGIKA PEMROSESAN ---
 prompt = prompt_text
 
 if audio_bytes and not prompt_text:
@@ -542,17 +554,14 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Inisialisasi teks tambahan
     teks_tambahan = ""
 
-    # 1. Cek apakah ada file dokumen yang diunggah
     if st.session_state.temp_doc:
         with st.spinner("Membaca referensi dokumen..."):
             teks_dok = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
             if teks_dok:
                 teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR KONTEN DOKUMEN]\n"
 
-    # 2. TAMBAHAN: Cek apakah prompt mengandung URL/Link
     url_pattern = re.compile(r'https?://\S+')
     urls_found = url_pattern.findall(prompt)
     
@@ -560,17 +569,14 @@ if prompt:
         with st.spinner("Mengekstrak informasi dari Link..."):
             for url in urls_found:
                 teks_web = ambil_teks_dari_link(url)
-                # Potong teks web agar tidak melebihi token limits (misal ambil 4000 karakter)
                 teks_web_singkat = teks_web[:4000]
                 teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{teks_web_singkat}\n[AKHIR ISI WEBSITE]\n"
 
-    # Gabungkan teks tambahan dengan prompt asli
     if teks_tambahan:
         final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}"
     else:
         final_prompt = prompt
 
-    # 3. Penanganan Gambar
     if st.session_state.temp_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
         konten_payload = [
@@ -580,7 +586,6 @@ if prompt:
     else:
         konten_payload = final_prompt 
 
-    # Simpan payload lengkap (termasuk isi web/dokumen) ke history sistem
     st.session_state.messages.append({"role": "user", "content": konten_payload})
 
     with st.chat_message("assistant"):
@@ -606,8 +611,6 @@ if prompt:
 
             placeholder.markdown(full_response)
             
-            # Ganti pesan terakhir yang disimpan dengan prompt bersih (tanpa isi web/dok yang panjang)
-            # Ini penting agar file .docx riwayat chat tidak kepanjangan dan database tidak cepat penuh
             st.session_state.messages[-1] = {"role": "user", "content": prompt}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
@@ -616,7 +619,6 @@ if prompt:
             
             judul_chat = generate_title_from_messages(st.session_state.messages)
             
-            # SIMPAN KE DATABASE DENGAN NAMA USER YANG SEDANG LOGIN
             save_session_db(st.session_state.current_session_id, st.session_state.username, judul_chat, st.session_state.messages)
 
             st.session_state.temp_image = None
