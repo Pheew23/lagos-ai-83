@@ -129,7 +129,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- PENGELOLA COOKIE (Tanpa fungsi Cache agar kompatibel dengan Streamlit terbaru) ---
+# --- PENGELOLA COOKIE ---
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
 # --- FUNGSI DATABASE MULTI-USER ---
@@ -220,27 +220,40 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
 
-# Membaca Cookie yang tersimpan
+# Membaca Cookie dari browser
 cookie_logged_in = cookie_manager.get("is_logged_in")
 cookie_username = cookie_manager.get("saved_username")
 
-# Auto-login jika cookie valid ditemukan
+# ========================================================
+# PERBAIKAN LOGOUT: Cegat "Zombie Cookie" di sini!
+# Eksekusi penghapusan cookie SEBELUM pengecekan auto-login
+# ========================================================
+if st.session_state.get("del_cookie") == True:
+    # Kirim perintah hapus ke browser
+    cookie_manager.delete("is_logged_in", key="del_login_cookie")
+    cookie_manager.delete("saved_username", key="del_user_cookie")
+    
+    # Matikan bendera agar tidak looping
+    st.session_state.del_cookie = False 
+    
+    # Paksa isi variabel menjadi None agar sistem tidak tertipu oleh sisa cookie
+    cookie_logged_in = None 
+    cookie_username = None
+
+# Auto-login jika cookie valid ditemukan DAN bukan sedang proses logout
 if cookie_logged_in == "True" and not st.session_state.logged_in:
     st.session_state.logged_in = True
     st.session_state.username = cookie_username
 
-# LOGIKA PENYIMPANAN COOKIE (Mencegah bentrok dengan st.rerun)
+# Eksekusi Penyimpanan Cookie jika ada perintah Login baru
 if st.session_state.get("set_cookie") == True:
     expire_date = datetime.datetime.now() + datetime.timedelta(days=7) # Bertahan 7 Hari
     cookie_manager.set("is_logged_in", "True", expires_at=expire_date, key="set_login_cookie")
     cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
     st.session_state.set_cookie = False
 
-if st.session_state.get("del_cookie") == True:
-    cookie_manager.delete("is_logged_in", key="del_login_cookie")
-    cookie_manager.delete("saved_username", key="del_user_cookie")
-    st.session_state.del_cookie = False
 
+# TAMPILAN HALAMAN LOGIN
 if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
@@ -281,6 +294,7 @@ if not st.session_state.logged_in:
                         st.warning("⚠️ Harap isi username dan password!")
     
     st.stop() # Hentikan eksekusi jika belum login
+
 
 # ==========================================
 # KODE DI BAWAH INI HANYA JALAN JIKA SUDAH LOGIN
@@ -439,13 +453,15 @@ with st.sidebar:
 
     st.divider()
     
-    # TOMBOL LOGOUT (Dengan Bendera Hapus Cookie)
+    # TOMBOL LOGOUT 
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-        st.session_state.del_cookie = True # Nyalakan bendera hapus cookie
+        
+        # Nyalakan bendera untuk menghapus cookie di siklus berikutnya
+        st.session_state.del_cookie = True 
         st.rerun()
         
     st.markdown("### 🛠️ Admin Panel")
