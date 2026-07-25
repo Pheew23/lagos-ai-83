@@ -13,6 +13,7 @@ import uuid
 import hashlib
 from datetime import datetime
 import streamlit.components.v1 as components
+from bs4 import BeautifulSoup # TAMBAHAN: Untuk parsing HTML
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -328,6 +329,25 @@ def generate_title_from_messages(messages):
             return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
     return "Obrolan Baru"
 
+# --- TAMBAHAN: FUNGSI MEMBACA LINK ---
+def ambil_teks_dari_link(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'} 
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Mengambil isi dari tag paragraf
+        paragraphs = soup.find_all('p')
+        text = ' '.join([p.get_text() for p in paragraphs])
+        
+        # Membersihkan spasi berlebih
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+    except Exception as e:
+        return f"Error saat membaca link: {str(e)}"
+
 # --- 4. INISIALISASI SESSION STATE OBROLAN ---
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
@@ -487,7 +507,7 @@ with input_container:
             st.session_state.temp_doc = up_doc
 
     with col_input:
-        prompt_text = st.chat_input("Tanyakan sesuatu pada Lagos AI 9.1...")
+        prompt_text = st.chat_input("Tanyakan sesuatu atau tempelkan link (http://...) pada Lagos AI 9.1...")
 
     with col_mic:
         audio_bytes = audio_recorder(
@@ -518,15 +538,38 @@ if audio_bytes and not prompt_text:
             prompt = None
 
 if prompt:
-    teks_dokumen = ""
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Inisialisasi teks tambahan
+    teks_tambahan = ""
+
+    # 1. Cek apakah ada file dokumen yang diunggah
     if st.session_state.temp_doc:
         with st.spinner("Membaca referensi dokumen..."):
-            teks_dokumen = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-        if teks_dokumen:
-            teks_dokumen = f"[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dokumen}\n[AKHIR KONTEN]\n\n"
+            teks_dok = ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
+            if teks_dok:
+                teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR KONTEN DOKUMEN]\n"
 
-    final_prompt = teks_dokumen + prompt
+    # 2. TAMBAHAN: Cek apakah prompt mengandung URL/Link
+    url_pattern = re.compile(r'https?://\S+')
+    urls_found = url_pattern.findall(prompt)
+    
+    if urls_found:
+        with st.spinner("Mengekstrak informasi dari Link..."):
+            for url in urls_found:
+                teks_web = ambil_teks_dari_link(url)
+                # Potong teks web agar tidak melebihi token limits (misal ambil 4000 karakter)
+                teks_web_singkat = teks_web[:4000]
+                teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{teks_web_singkat}\n[AKHIR ISI WEBSITE]\n"
 
+    # Gabungkan teks tambahan dengan prompt asli
+    if teks_tambahan:
+        final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}"
+    else:
+        final_prompt = prompt
+
+    # 3. Penanganan Gambar
     if st.session_state.temp_image:
         base64_img = konversi_gambar_ke_base64(st.session_state.temp_image)
         konten_payload = [
@@ -536,9 +579,7 @@ if prompt:
     else:
         konten_payload = final_prompt 
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
+    # Simpan payload lengkap (termasuk isi web/dokumen) ke history sistem
     st.session_state.messages.append({"role": "user", "content": konten_payload})
 
     with st.chat_message("assistant"):
@@ -564,7 +605,9 @@ if prompt:
 
             placeholder.markdown(full_response)
             
-            st.session_state.messages[-1] = {"role": "user", "content": f"[User Query] {prompt}"}
+            # Ganti pesan terakhir yang disimpan dengan prompt bersih (tanpa isi web/dok yang panjang)
+            # Ini penting agar file .docx riwayat chat tidak kepanjangan dan database tidak cepat penuh
+            st.session_state.messages[-1] = {"role": "user", "content": prompt}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
             if st.session_state.current_session_id is None:
