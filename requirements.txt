@@ -7,3 +7,4 @@ audio-recorder-streamlit
 SpeechRecognition
 requests
 extra-streamlit-components
+beautifulsoup4
