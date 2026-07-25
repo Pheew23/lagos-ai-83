@@ -12,10 +12,9 @@ import sqlite3
 import json
 import uuid
 import hashlib
-from datetime import datetime
+import datetime # Tambahan untuk waktu kadaluarsa cookie
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup 
-import time
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -130,7 +129,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- PENGELOLA COOKIE ---
+# --- PENGELOLA COOKIE (Sudah diperbaiki error CacheResourceAPI) ---
+@st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager(key="cookie_manager")
 
@@ -200,7 +200,7 @@ def save_session_db(session_id, username, title, messages):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO sessions (session_id, username, title, updated_at) VALUES (?, ?, ?, ?)", 
-              (session_id, username, title, datetime.now()))
+              (session_id, username, title, datetime.datetime.now()))
     c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
     for msg in messages:
         if msg["role"] != "system":
@@ -228,11 +228,22 @@ if "logged_in" not in st.session_state:
 cookie_logged_in = cookie_manager.get("is_logged_in")
 cookie_username = cookie_manager.get("saved_username")
 
-# Auto-login jika cookie valid dan session belum login (misal setelah refresh)
+# Auto-login jika cookie valid ditemukan
 if cookie_logged_in == "True" and not st.session_state.logged_in:
     st.session_state.logged_in = True
     st.session_state.username = cookie_username
-    st.rerun()
+
+# LOGIKA PENYIMPANAN COOKIE (Mencegah bentrok dengan st.rerun)
+if st.session_state.get("set_cookie") == True:
+    expire_date = datetime.datetime.now() + datetime.timedelta(days=7) # Bertahan 7 Hari
+    cookie_manager.set("is_logged_in", "True", expires_at=expire_date, key="set_login_cookie")
+    cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
+    st.session_state.set_cookie = False
+
+if st.session_state.get("del_cookie") == True:
+    cookie_manager.delete("is_logged_in", key="del_login_cookie")
+    cookie_manager.delete("saved_username", key="del_user_cookie")
+    st.session_state.del_cookie = False
 
 if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
@@ -253,12 +264,7 @@ if not st.session_state.logged_in:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
-                        
-                        # Set Cookies (Bisa bertahan meski halaman di-refresh)
-                        cookie_manager.set("is_logged_in", "True", key="set_cookie_login")
-                        cookie_manager.set("saved_username", log_user, key="set_cookie_user")
-                        
-                        time.sleep(0.5) # Jeda sedikit agar cookie sempat tersimpan ke browser
+                        st.session_state.set_cookie = True # Nyalakan bendera simpan cookie
                         st.rerun()
                     else:
                         st.error("Username atau password salah!")
@@ -373,7 +379,7 @@ if "uploader_key" not in st.session_state:
 st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
 st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
-# --- SIDEBAR (FITUR HISTORY SPESIFIK USER) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.success(f"👤 Login sebagai: **{st.session_state.username}**")
     
@@ -388,7 +394,7 @@ with st.sidebar:
     if not sessions:
         st.caption("Belum ada riwayat obrolan.")
     else:
-        with st.container(height=350, border=False):
+        with st.container(height=300, border=False):
             for sess_id, title in sessions:
                 col_btn, col_del = st.columns([6, 1], gap="small") 
                 
@@ -437,17 +443,13 @@ with st.sidebar:
 
     st.divider()
     
-    # TOMBOL LOGOUT SEKALIGUS MENGHAPUS COOKIE
+    # TOMBOL LOGOUT (Dengan Bendera Hapus Cookie)
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-        
-        cookie_manager.delete("is_logged_in", key="delete_cookie_login")
-        cookie_manager.delete("saved_username", key="delete_cookie_user")
-        
-        time.sleep(0.5)
+        st.session_state.del_cookie = True # Nyalakan bendera hapus cookie
         st.rerun()
         
     st.markdown("### 🛠️ Admin Panel")
@@ -462,6 +464,16 @@ with st.sidebar:
             )
     except FileNotFoundError:
         pass
+
+    # Ruang Placeholder untuk Integrasi Iklan
+    st.markdown(
+        '''
+        <div style="background-color: var(--secondary-background-color); border: 1px dashed var(--border-color); padding: 15px; border-radius: 10px; text-align: center; margin-top: 20px;">
+            <span style="color: #888; font-size: 0.75rem;">Advertisement Space</span><br>
+            <span style="font-size: 0.9rem;">Integrasi Iklan Akan Ditampilkan Di Sini</span>
+        </div>
+        ''', unsafe_allow_html=True
+    )
 
 # --- 5. AREA OBROLAN UTAMA ---
 if len(st.session_state.messages) == 1:
