@@ -131,7 +131,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- PENGELOLA COOKIE ---
-@st.cache_resource(experimental_allow_widgets=True)
 def get_cookie_manager():
     return stx.CookieManager(key="cookie_manager")
 
