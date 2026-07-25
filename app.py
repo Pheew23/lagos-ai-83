@@ -12,7 +12,7 @@ import sqlite3
 import json
 import uuid
 import hashlib
-import datetime # Tambahan untuk waktu kadaluarsa cookie
+import datetime
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup 
 
@@ -129,12 +129,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- PENGELOLA COOKIE (Sudah diperbaiki error CacheResourceAPI) ---
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager(key="cookie_manager")
-
-cookie_manager = get_cookie_manager()
+# --- PENGELOLA COOKIE (Tanpa fungsi Cache agar kompatibel dengan Streamlit terbaru) ---
+cookie_manager = stx.CookieManager(key="cookie_manager")
 
 # --- FUNGSI DATABASE MULTI-USER ---
 DB_NAME = 'lagos_multiuser.db'
