@@ -14,6 +14,7 @@ import hashlib
 from datetime import datetime
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup # TAMBAHAN: Untuk parsing HTML
+import extra_streamlit_components as stx
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
