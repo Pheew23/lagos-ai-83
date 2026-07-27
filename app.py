@@ -430,7 +430,7 @@ with st.sidebar:
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Analisis Mendalam",
         "google/diffusiongemma-26b-a4b-it": "4. Stabil",
-        "deepseek-ai/deepseek-v4-pro": "5. Projek Khusus"
+        "deepseek-ai/deepseek-v4-flash": "5. Projek Khusus"
     }
     
     MODEL_NAME = st.selectbox(
