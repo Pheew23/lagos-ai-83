@@ -430,7 +430,8 @@ with st.sidebar:
         "thinkingmachines/inkling": "2. Cepat(text only)",
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Analisis Mendalam",
         "google/diffusiongemma-26b-a4b-it": "4. Stabil",
-        "deepseek-ai/deepseek-v4-flash": "5. Projek Khusus"
+        "deepseek-ai/deepseek-v4-flash": "5. Projek Khusus",
+        "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (Veo)"
     }
     
     MODEL_NAME = st.selectbox(
@@ -617,22 +618,35 @@ if prompt:
         full_response = ""
 
         try:
-            response_stream = client.chat.completions.create(
-                model=MODEL_NAME, 
-                messages=st.session_state.messages,
-                temperature=0.3,
-                max_tokens=4096,
-                stream=True
-            )
+            if MODEL_NAME == "google/veo-3.1-fast-generate-preview":
+                # Cabang Khusus untuk Image Generation Model
+                with st.spinner("Menghasilkan gambar..."):
+                    img_response = client.images.generate(
+                        model=MODEL_NAME,
+                        prompt=prompt,
+                        n=1
+                    )
+                    image_url = img_response.data[0].url
+                    full_response = f"![Gambar yang Dihasilkan]({image_url})"
+                    placeholder.markdown(full_response)
+            else:
+                # Cabang Default untuk Text Completion / Chat
+                response_stream = client.chat.completions.create(
+                    model=MODEL_NAME, 
+                    messages=st.session_state.messages,
+                    temperature=0.3,
+                    max_tokens=4096,
+                    stream=True
+                )
 
-            for chunk in response_stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full_response += delta
-                        placeholder.markdown(full_response + "▌")
+                for chunk in response_stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            full_response += delta
+                            placeholder.markdown(full_response + "▌")
 
-            placeholder.markdown(full_response)
+                placeholder.markdown(full_response)
             
             st.session_state.messages[-1] = {"role": "user", "content": prompt}
             st.session_state.messages.append({"role": "assistant", "content": full_response})
