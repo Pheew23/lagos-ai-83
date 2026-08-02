@@ -380,10 +380,32 @@ def inject_auto_scroll():
         </script>
     """, height=0)
 
-# [FITUR BARU] Fungsi Dialog Modal untuk Web App Preview
+# [FITUR BARU] Fungsi Dialog Modal untuk Web App Preview (DIPERBARUI)
 @st.dialog("🌐 Web App Preview", width="large")
 def render_webapp_modal(html_code: str):
     st.info("💡 Interaksi dengan Web App di bawah ini. Tekan 'X' di sudut kanan atas untuk menutup.")
+    
+    # --- PERBAIKAN: Inject script agar semua link terbuka di tab baru ---
+    injection = """
+    <base target="_blank">
+    <script>
+        // Mencegah link me-refresh frame utama
+        document.addEventListener("click", function(e) {
+            var target = e.target.closest("a");
+            if(target && target.href) {
+                target.setAttribute("target", "_blank");
+            }
+        });
+    </script>
+    """
+    
+    # Sisipkan injection tepat setelah tag <head> jika ada, jika tidak taruh di paling atas
+    if re.search(r'<head[^>]*>', html_code, re.IGNORECASE):
+        html_code = re.sub(r'(<head[^>]*>)', r'\1\n' + injection, html_code, count=1, flags=re.IGNORECASE)
+    else:
+        html_code = injection + "\n" + html_code
+    # -------------------------------------------------------------------
+
     # Render komponen HTML dengan tinggi 600px dan bisa di-scroll
     components.html(html_code, height=600, scrolling=True)
 
