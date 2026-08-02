@@ -7,3 +7,4 @@ SpeechRecognition
 beautifulsoup4
 requests
 firebase-admin
+pypdf
