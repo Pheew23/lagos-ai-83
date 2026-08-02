@@ -663,8 +663,8 @@ def main():
                     response_stream = client.chat.completions.create(
                         model=selected_model, 
                         messages=st.session_state.messages,
-                        temperature=0.3,
-                        max_tokens=4096,
+                        temperature=0.7,
+                        max_tokens=12096,
                         stream=True
                     )
                     for chunk in response_stream:
