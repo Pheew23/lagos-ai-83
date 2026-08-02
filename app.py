@@ -8,13 +8,16 @@ import requests
 from docx import Document
 from audio_recorder_streamlit import audio_recorder
 import speech_recognition as sr
-import sqlite3
 import json
 import uuid
 import hashlib
 import datetime
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup 
+
+# --- IMPORT FIREBASE ---
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -24,7 +27,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. CUSTOM CSS (GAYA CLEAN & BRANDING LAGOS) ---
+# --- 2. CUSTOM CSS ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
@@ -132,128 +135,85 @@ st.markdown("""
 # --- PENGELOLA COOKIE ---
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
-# --- FUNGSI DATABASE MULTI-USER ---
-DB_NAME = 'lagos_multiuser.db'
+# --- INISIALISASI FIREBASE ---
+@st.cache_resource
+def init_firebase():
+    if not firebase_admin._apps:
+        cred_dict = dict(st.secrets["firebase"])
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+    return firestore.client()
 
+db = init_firebase()
+
+# --- FUNGSI DATABASE FIREBASE ---
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, username TEXT, title TEXT, updated_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT)''')
-    conn.commit()
-    conn.close()
-
 def register_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
-        conn.commit()
-        success = True
-    except sqlite3.IntegrityError:
-        success = False 
-    conn.close()
-    return success
+    user_ref = db.collection('users').document(username)
+    if user_ref.get().exists:
+        return False
+    user_ref.set({'password': hash_password(password)})
+    return True
 
 def authenticate_user(username, password):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT password FROM users WHERE username=?", (username,))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0] == hash_password(password):
-        return True
+    user_doc = db.collection('users').document(username).get()
+    if user_doc.exists:
+        if user_doc.to_dict().get('password') == hash_password(password):
+            return True
     return False
 
 def get_user_sessions(username):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
+    docs = db.collection('sessions').where('username', '==', username).order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
+    return [(doc.id, doc.to_dict().get('title', 'Obrolan Baru')) for doc in docs]
 
 def load_session_messages(session_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
-    rows = c.fetchall()
-    conn.close()
+    session_doc = db.collection('sessions').document(session_id).get()
+    if session_doc.exists:
+        data = session_doc.to_dict()
+        if 'messages' in data:
+            return data['messages']
     
-    msgs = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
-    for r, c in rows:
-        try:
-            msgs.append({"role": r, "content": json.loads(c)})
-        except:
-            msgs.append({"role": r, "content": c})
-    return msgs
+    return [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
 
 def save_session_db(session_id, username, title, messages):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO sessions (session_id, username, title, updated_at) VALUES (?, ?, ?, ?)", 
-              (session_id, username, title, datetime.datetime.now()))
-    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-    for msg in messages:
-        if msg["role"] != "system":
-            c.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
-                      (session_id, msg["role"], json.dumps(msg["content"])))
-    conn.commit()
-    conn.close()
+    db.collection('sessions').document(session_id).set({
+        'username': username,
+        'title': title,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+        'messages': messages
+    })
 
 def delete_session_db(session_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
-    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-    conn.commit()
-    conn.close()
+    db.collection('sessions').document(session_id).delete()
 
-init_db()
 
 # --- 3. SISTEM AUTENTIKASI (LOGIN/REGISTER DENGAN COOKIES) ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
 
-# Membaca Cookie dari browser
 cookie_logged_in = cookie_manager.get("is_logged_in")
 cookie_username = cookie_manager.get("saved_username")
 
-# ========================================================
-# PERBAIKAN LOGOUT: Cegat "Zombie Cookie" di sini!
-# Eksekusi penghapusan cookie SEBELUM pengecekan auto-login
-# ========================================================
 if st.session_state.get("del_cookie") == True:
-    # Kirim perintah hapus ke browser
     cookie_manager.delete("is_logged_in", key="del_login_cookie")
     cookie_manager.delete("saved_username", key="del_user_cookie")
-    
-    # Matikan bendera agar tidak looping
     st.session_state.del_cookie = False 
-    
-    # Paksa isi variabel menjadi None agar sistem tidak tertipu oleh sisa cookie
     cookie_logged_in = None 
     cookie_username = None
 
-# Auto-login jika cookie valid ditemukan DAN bukan sedang proses logout
 if cookie_logged_in == "True" and not st.session_state.logged_in:
     st.session_state.logged_in = True
     st.session_state.username = cookie_username
 
-# Eksekusi Penyimpanan Cookie jika ada perintah Login baru
 if st.session_state.get("set_cookie") == True:
-    expire_date = datetime.datetime.now() + datetime.timedelta(days=7) # Bertahan 7 Hari
+    expire_date = datetime.datetime.now() + datetime.timedelta(days=7)
     cookie_manager.set("is_logged_in", "True", expires_at=expire_date, key="set_login_cookie")
     cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
     st.session_state.set_cookie = False
 
-
-# TAMPILAN HALAMAN LOGIN
 if not st.session_state.logged_in:
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
@@ -273,7 +233,7 @@ if not st.session_state.logged_in:
                     if authenticate_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.username = log_user
-                        st.session_state.set_cookie = True # Nyalakan bendera simpan cookie
+                        st.session_state.set_cookie = True 
                         st.rerun()
                     else:
                         st.error("Username atau password salah!")
@@ -293,7 +253,7 @@ if not st.session_state.logged_in:
                     else:
                         st.warning("⚠️ Harap isi username dan password!")
     
-    st.stop() # Hentikan eksekusi jika belum login
+    st.stop() 
 
 
 # ==========================================
@@ -302,7 +262,7 @@ if not st.session_state.logged_in:
 
 # --- KONFIGURASI API ---
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
-BASE_URL = "https://integrate.api.nvidia.com/v1"
+BASE_URL = "[https://integrate.api.nvidia.com/v1](https://integrate.api.nvidia.com/v1)"
 
 # --- FUNGSI PEMBANTU MULTIMEDIA ---
 @st.cache_data(show_spinner=False)
@@ -373,11 +333,24 @@ def ambil_teks_dari_link(url):
     except Exception as e:
         return f"Error saat membaca link: {str(e)}"
 
+# --- FUNGSI UNTUK FITUR WEB APP POP-UP (STYLE CLAUDE ARTIFACT) ---
+@st.dialog("🌐 Pratinjau Web App Terintegrasi", width="large")
+def tampilkan_popup_web(html_code):
+    st.info("💡 Berjalan secara lokal di browser Anda. Tutup pop-up dengan mengklik area luar atau tanda 'X'.")
+    components.html(html_code, height=600, scrolling=True)
+
+def ekstrak_kode_html(teks):
+    # Menggunakan regex untuk menangkap isi dari ```html ... ```
+    match = re.search(r'```html\n?(.*?)\n?```', teks, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
 # --- 4. INISIALISASI SESSION STATE OBROLAN ---
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
 if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
@@ -395,7 +368,7 @@ with st.sidebar:
     
     if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
         st.session_state.current_session_id = None
-        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
         st.rerun()
 
     st.markdown("### 🗂️ Riwayat Obrolan")
@@ -419,7 +392,7 @@ with st.sidebar:
                         delete_session_db(sess_id)
                         if st.session_state.current_session_id == sess_id:
                             st.session_state.current_session_id = None
-                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
+                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
                         st.rerun()
 
     st.divider()
@@ -454,29 +427,17 @@ with st.sidebar:
 
     st.divider()
     
-    # TOMBOL LOGOUT 
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.current_session_id = None
         st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         
-        # Nyalakan bendera untuk menghapus cookie di siklus berikutnya
         st.session_state.del_cookie = True 
         st.rerun()
         
     st.markdown("### 🛠️ Admin Panel")
-    try:
-        with open(DB_NAME, "rb") as db_file:
-            st.download_button(
-                label="📦 Download Database (Admin)",
-                data=db_file,
-                file_name="lagos_multiuser.db",
-                mime="application/octet-stream",
-                use_container_width=True
-            )
-    except FileNotFoundError:
-        pass
+    st.caption("Penyimpanan menggunakan Firebase (Cloud).")
 
     # Ruang Placeholder untuk Integrasi Iklan
     st.markdown(
@@ -492,15 +453,21 @@ with st.sidebar:
 if len(st.session_state.messages) == 1:
     st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     if message["role"] == "system": continue
     with st.chat_message(message["role"]):
         content = message["content"]
         text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
         st.markdown(text_disp)
+        
+        # --- FITUR DETEKSI WEB APP (ARTIFACT) ---
+        if message["role"] == "assistant":
+            html_code = ekstrak_kode_html(text_disp)
+            if html_code:
+                if st.button("🚀 Buka Pratinjau Web App", key=f"preview_{i}"):
+                    tampilkan_popup_web(html_code)
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
-
 st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
 
 components.html(
@@ -619,7 +586,6 @@ if prompt:
 
         try:
             if MODEL_NAME == "google/veo-3.1-fast-generate-preview":
-                # Cabang Khusus untuk Image Generation Model
                 with st.spinner("Menghasilkan gambar..."):
                     img_response = client.images.generate(
                         model=MODEL_NAME,
@@ -630,7 +596,6 @@ if prompt:
                     full_response = f"![Gambar yang Dihasilkan]({image_url})"
                     placeholder.markdown(full_response)
             else:
-                # Cabang Default untuk Text Completion / Chat
                 response_stream = client.chat.completions.create(
                     model=MODEL_NAME, 
                     messages=st.session_state.messages,
