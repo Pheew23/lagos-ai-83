@@ -35,15 +35,21 @@ MODEL_MAPPING = {
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (Veo)"
 }
 
-SYSTEM_PROMPT = "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."
+# [FITUR BARU] Instruksi spesifik agar AI memberikan format HTML yang bisa dirender
+SYSTEM_PROMPT = """Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi.
+Jika pengguna meminta Anda untuk membuat web app, website, permainan, atau antarmuka UI interaktif, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode berikut:
+```html
+<!DOCTYPE html>
+<html>
+...
+</html>
+```"""
 
 
 # ==========================================
 # 2. MANAJER DATABASE
 # ==========================================
 class DatabaseManager:
-    """Manajer untuk menghandle seluruh interaksi dengan SQLite."""
-    
     @staticmethod
     @contextmanager
     def get_connection():
@@ -214,6 +220,12 @@ class MediaUtils:
         except Exception as e:
             return f"Error saat membaca link: {str(e)}"
 
+    # [FITUR BARU] Mengekstrak kode HTML dari jawaban AI
+    @staticmethod
+    def ekstrak_kode_html(teks: str) -> Optional[str]:
+        match = re.search(r'```html\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
+        return match.group(1) if match else None
+
 
 # ==========================================
 # 4. KOMPONEN UI & TAMPILAN
@@ -368,6 +380,13 @@ def inject_auto_scroll():
         </script>
     """, height=0)
 
+# [FITUR BARU] Fungsi Dialog Modal untuk Web App Preview
+@st.dialog("🌐 Web App Preview", width="large")
+def render_webapp_modal(html_code: str):
+    st.info("💡 Interaksi dengan Web App di bawah ini. Tekan 'X' di sudut kanan atas untuk menutup.")
+    # Render komponen HTML dengan tinggi 600px dan bisa di-scroll
+    components.html(html_code, height=600, scrolling=True)
+
 
 # ==========================================
 # 5. INISIALISASI & SETUP APLIKASI
@@ -391,7 +410,6 @@ def init_session_state():
 # 6. LOGIKA UTAMA APLIKASI
 # ==========================================
 def main():
-    # Setup Halaman Streamlit
     st.set_page_config(
         page_title="Lagos AI 9.1 | Premium Chat",
         page_icon="🔮",
@@ -406,7 +424,6 @@ def main():
     cookie_logged_in = cookie_manager.get("is_logged_in")
     cookie_username = cookie_manager.get("saved_username")
 
-    # Logika Logout & Pembersihan Cookie
     if st.session_state.get("del_cookie") == True:
         cookie_manager.delete("is_logged_in", key="del_login_cookie")
         cookie_manager.delete("saved_username", key="del_user_cookie")
@@ -414,26 +431,19 @@ def main():
         cookie_logged_in = None 
         cookie_username = None
 
-    # Auto-login via Cookie
     if cookie_logged_in == "True" and not st.session_state.logged_in:
         st.session_state.logged_in = True
         st.session_state.username = cookie_username
 
-    # Menyimpan Cookie saat login baru
     if st.session_state.get("set_cookie") == True:
         expire_date = datetime.datetime.now() + datetime.timedelta(days=7)
         cookie_manager.set("is_logged_in", "True", expires_at=expire_date, key="set_login_cookie")
         cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
         st.session_state.set_cookie = False
 
-    # Route: Halaman Login
     if not st.session_state.logged_in:
         render_login_ui()
         st.stop()
-
-    # ==========================================
-    # AREA PENGGUNA TERAUTENTIKASI
-    # ==========================================
     
     # --- HEADER UTAMA ---
     st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
@@ -526,12 +536,24 @@ def main():
     if len(st.session_state.messages) == 1:
         st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
-    for message in st.session_state.messages:
+    # [FITUR BARU] Looping untuk menampilkan pesan dan mendeteksi ketersediaan Web App
+    for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
         with st.chat_message(message["role"]):
             content = message["content"]
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+            
+            # Tampilkan teks markdown standar
             st.markdown(text_disp)
+            
+            # Jika role adalah assistant, periksa apakah ada kode HTML
+            if message["role"] == "assistant":
+                html_code = MediaUtils.ekstrak_kode_html(text_disp)
+                if html_code:
+                    st.write("") # Memberi sedikit jarak
+                    # Tampilkan tombol untuk membuka Pop-up
+                    if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
+                        render_webapp_modal(html_code)
 
     st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
@@ -594,15 +616,12 @@ def main():
             st.markdown(prompt)
 
         teks_tambahan = ""
-
-        # Ekstrak Teks dari Dokumen
         if st.session_state.temp_doc:
             with st.spinner("Membaca referensi dokumen..."):
                 teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
                 if teks_dok:
                     teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR KONTEN DOKUMEN]\n"
 
-        # Ekstrak Teks dari URL
         urls_found = re.compile(r'https?://\S+').findall(prompt)
         if urls_found:
             with st.spinner("Mengekstrak informasi dari Link..."):
@@ -613,7 +632,6 @@ def main():
 
         final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
-        # Menyusun Payload Request
         if st.session_state.temp_image:
             base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
             konten_payload = [
@@ -657,7 +675,6 @@ def main():
                                 placeholder.markdown(full_response + "▌")
                     placeholder.markdown(full_response)
                 
-                # Simpan pesan asli (tanpa payload file yang memberatkan DB)
                 st.session_state.messages[-1] = {"role": "user", "content": prompt}
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
@@ -672,7 +689,6 @@ def main():
                     st.session_state.messages
                 )
 
-                # Reset state uploader untuk interaksi berikutnya
                 st.session_state.temp_image = None
                 st.session_state.temp_doc = None
                 st.session_state.uploader_key += 1 
