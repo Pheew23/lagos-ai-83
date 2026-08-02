@@ -139,6 +139,7 @@ cookie_manager = stx.CookieManager(key="cookie_manager")
 @st.cache_resource
 def init_firebase():
     if not firebase_admin._apps:
+        # Mengambil kredensial dari st.secrets
         cred_dict = dict(st.secrets["firebase"])
         cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred)
@@ -153,7 +154,7 @@ def hash_password(password):
 def register_user(username, password):
     user_ref = db.collection('users').document(username)
     if user_ref.get().exists:
-        return False
+        return False # Username sudah ada
     user_ref.set({'password': hash_password(password)})
     return True
 
@@ -165,6 +166,7 @@ def authenticate_user(username, password):
     return False
 
 def get_user_sessions(username):
+    # Membutuhkan Index Composite Firestore di konsol nantinya
     docs = db.collection('sessions').where('username', '==', username).order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
     return [(doc.id, doc.to_dict().get('title', 'Obrolan Baru')) for doc in docs]
 
@@ -175,7 +177,7 @@ def load_session_messages(session_id):
         if 'messages' in data:
             return data['messages']
     
-    return [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
+    return [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
 
 def save_session_db(session_id, username, title, messages):
     db.collection('sessions').document(session_id).set({
@@ -262,7 +264,7 @@ if not st.session_state.logged_in:
 
 # --- KONFIGURASI API ---
 API_KEY = st.secrets["NVIDIA_API_KEY"] 
-BASE_URL = "[https://integrate.api.nvidia.com/v1](https://integrate.api.nvidia.com/v1)"
+BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 # --- FUNGSI PEMBANTU MULTIMEDIA ---
 @st.cache_data(show_spinner=False)
@@ -333,24 +335,11 @@ def ambil_teks_dari_link(url):
     except Exception as e:
         return f"Error saat membaca link: {str(e)}"
 
-# --- FUNGSI UNTUK FITUR WEB APP POP-UP (STYLE CLAUDE ARTIFACT) ---
-@st.dialog("🌐 Pratinjau Web App Terintegrasi", width="large")
-def tampilkan_popup_web(html_code):
-    st.info("💡 Berjalan secara lokal di browser Anda. Tutup pop-up dengan mengklik area luar atau tanda 'X'.")
-    components.html(html_code, height=600, scrolling=True)
-
-def ekstrak_kode_html(teks):
-    # Menggunakan regex untuk menangkap isi dari ```html ... ```
-    match = re.search(r'```html\n?(.*?)\n?```', teks, re.DOTALL | re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    return None
-
 # --- 4. INISIALISASI SESSION STATE OBROLAN ---
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = None
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
+    st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
 if "temp_image" not in st.session_state:
     st.session_state.temp_image = None
 if "temp_doc" not in st.session_state:
@@ -368,7 +357,7 @@ with st.sidebar:
     
     if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
         st.session_state.current_session_id = None
-        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
+        st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
         st.rerun()
 
     st.markdown("### 🗂️ Riwayat Obrolan")
@@ -392,7 +381,7 @@ with st.sidebar:
                         delete_session_db(sess_id)
                         if st.session_state.current_session_id == sess_id:
                             st.session_state.current_session_id = None
-                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi. Jika pengguna meminta untuk membuat web/aplikasi web, berikan KODE UTUH (gabungkan HTML, CSS, dan JS) di dalam HANYA SATU BLOK kode ```html agar bisa langsung dijalankan."}]
+                            st.session_state.messages = [{"role": "system", "content": "Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi."}]
                         st.rerun()
 
     st.divider()
@@ -427,6 +416,7 @@ with st.sidebar:
 
     st.divider()
     
+    # TOMBOL LOGOUT 
     if st.button("🚪 Keluar (Logout)", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -437,6 +427,7 @@ with st.sidebar:
         st.rerun()
         
     st.markdown("### 🛠️ Admin Panel")
+    # Karena tidak menggunakan SQLite lagi, download database tidak berlaku.
     st.caption("Penyimpanan menggunakan Firebase (Cloud).")
 
     # Ruang Placeholder untuk Integrasi Iklan
@@ -453,21 +444,15 @@ with st.sidebar:
 if len(st.session_state.messages) == 1:
     st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
-for i, message in enumerate(st.session_state.messages):
+for message in st.session_state.messages:
     if message["role"] == "system": continue
     with st.chat_message(message["role"]):
         content = message["content"]
         text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
         st.markdown(text_disp)
-        
-        # --- FITUR DETEKSI WEB APP (ARTIFACT) ---
-        if message["role"] == "assistant":
-            html_code = ekstrak_kode_html(text_disp)
-            if html_code:
-                if st.button("🚀 Buka Pratinjau Web App", key=f"preview_{i}"):
-                    tampilkan_popup_web(html_code)
 
 st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
+
 st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
 
 components.html(
