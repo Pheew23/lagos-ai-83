@@ -1,10 +1,9 @@
 streamlit
+extra-streamlit-components
 openai
 python-docx
-pypdf
-streamlit-lottie
 audio-recorder-streamlit
 SpeechRecognition
-requests
-extra-streamlit-components
 beautifulsoup4
+requests
+firebase-admin
