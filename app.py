@@ -37,7 +37,7 @@ MODEL_MAPPING = {
 
 # [FITUR BARU] Instruksi spesifik agar AI memberikan format HTML yang bisa dirender
 SYSTEM_PROMPT = """Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi.
-Jika pengguna meminta Anda untuk membuat web app, website, permainan dan lain lain dalam aplikasi (jika tidak di suruh buat aplikasi tidak perlu), Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode berikut:
+Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode berikut:
 ```html
 <!DOCTYPE html>
 <html>
