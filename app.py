@@ -27,16 +27,16 @@ API_KEY = st.secrets["NVIDIA_API_KEY"]
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 MODEL_MAPPING = {
-    "openai/gpt-oss-120b": "1. Sangat Cepat (text only)",
-    "thinkingmachines/inkling": "2. Cepat(text only)",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Analisis Mendalam",
-    "google/diffusiongemma-26b-a4b-it": "4. Stabil",
-    "deepseek-ai/deepseek-v4-flash": "5. Projek Khusus",
-    "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (Veo)"
+    "openai/gpt-oss-120b": "1. Flash (text only",
+    "thinkingmachines/inkling": "2. Pro(text only)",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Pro (Analisis)",
+    "google/diffusiongemma-26b-a4b-it": "4. Stable",
+    "deepseek-ai/deepseek-v4-flash": "5. limited",
+    "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
 }
 
 # [FITUR BARU] Instruksi spesifik agar AI memberikan format HTML yang bisa dirender
-SYSTEM_PROMPT = """Dengan Bangga selalu menyebut jika ditanya siapa anda Anda adalah Lagos AI 9.1 (Rian Dev), asisten analitik tingkat tinggi sebutkan keahlian anda. "Dilarang Menyebutkan Nama Model Asli anda".
+SYSTEM_PROMPT = """Dengan Bangga selalu menyebut jika ditanya siapa anda Anda adalah Lagøs AI 9.1 (Rian Dev), asisten analitik tingkat tinggi sebutkan keahlian anda. "Dilarang Menyebutkan Nama Model Asli anda".
 Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode berikut:
 ```html
 <!DOCTYPE html>
@@ -326,7 +326,7 @@ def inject_custom_css():
     """, unsafe_allow_html=True)
 
 def render_login_ui():
-    st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
