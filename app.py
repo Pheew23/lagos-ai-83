@@ -172,11 +172,11 @@ class MediaUtils:
     @staticmethod
     def buat_file_word(riwayat_pesan: List[Dict[str, Any]]) -> io.BytesIO:
         doc = Document()
-        doc.add_heading('Lagos AI 9.1 - Analisis Laporan', 0)
+        doc.add_heading('Lagøs AI 9.1 - Analisis Laporan', 0)
         
         for msg in riwayat_pesan:
             if msg["role"] == "system": continue
-            role_title = "User" if msg["role"] == "user" else "Lagos AI 9.1"
+            role_title = "User" if msg["role"] == "user" else "Lagøs AI 9.1"
             doc.add_heading(f"{role_title}", level=2)
             
             content = msg["content"]
@@ -433,7 +433,7 @@ def init_session_state():
 # ==========================================
 def main():
     st.set_page_config(
-        page_title="Lagos AI 9.1 | Premium Chat",
+        page_title="Lagøs AI 9.1 | Premium Chat",
         page_icon="🔮",
         layout="centered", 
         initial_sidebar_state="expanded"
@@ -468,7 +468,7 @@ def main():
         st.stop()
     
     # --- HEADER UTAMA ---
-    st.markdown('<div class="header-title">🔮 Lagos AI 9.1</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
     # --- SIDEBAR PENGATURAN ---
@@ -518,7 +518,7 @@ def main():
             st.download_button(
                 label="📥 Unduh Laporan (.DOCX)",
                 data=file_word,
-                file_name="Lagos_AI_9.1_Report.docx",
+                file_name="Lagøs_AI_9.1_Report.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True
             )
@@ -603,7 +603,7 @@ def main():
                 st.session_state.temp_doc = up_doc
 
         with col_input:
-            prompt_text = st.chat_input("Tanyakan sesuatu atau tempelkan link (http://...) pada Lagos AI 9.1...")
+            prompt_text = st.chat_input("Tanyakan sesuatu atau tempelkan link (http://...) pada Lagøs AI 9.1...")
 
         with col_mic:
             audio_bytes = audio_recorder(
@@ -718,7 +718,7 @@ def main():
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Kesalahan teknis pada engine Lagos AI: {str(e)}")
+                st.error(f"Kesalahan teknis pada engine Lagøs AI: {str(e)}")
                 if st.session_state.messages[-1]["role"] == "user":
                     st.session_state.messages.pop()
 
