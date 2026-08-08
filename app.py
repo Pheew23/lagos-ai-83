@@ -505,7 +505,7 @@ def main():
         st.stop()
     
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
-    st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-subtitle">Assistant AI</div>', unsafe_allow_html=True)
 
     with st.sidebar:
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
@@ -590,7 +590,7 @@ def main():
         )
 
     if len(st.session_state.messages) == 1:
-        st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap.</p>", unsafe_allow_html=True)
 
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
@@ -649,7 +649,7 @@ def main():
                 st.session_state.temp_doc = up_doc
 
         with col_input:
-            prompt_text = st.chat_input("Tanyakan sesuatu atau tempelkan link (http://...) pada Lagøs AI 9.1...")
+            prompt_text = st.chat_input("Tanyakan sesuatu pada Lagøs AI 9.1...")
 
         with col_mic:
             audio_bytes = audio_recorder(
