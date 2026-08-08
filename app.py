@@ -187,9 +187,13 @@ class MediaUtils:
                         teks_hasil += teks + "\n"
             elif nama_file.endswith('.txt'):
                 teks_hasil = uploaded_file.read().decode("utf-8")
+            elif nama_file.endswith('.docx'):
+                doc = Document(uploaded_file)
+                for para in doc.paragraphs:
+                    teks_hasil += para.text + "\n"
             return teks_hasil.strip()
-        except Exception:
-            return ""
+        except Exception as e:
+            return f"Gagal membaca dokumen: {str(e)}"
 
     @staticmethod
     def buat_file_word(riwayat_pesan: List[Dict[str, Any]]) -> io.BytesIO:
@@ -638,8 +642,9 @@ def main():
         with col_attach:
             with st.popover("➕"): 
                 st.markdown("**Lampirkan File**")
+                # DI SINI PERUBAHANNYA: docx ditambahkan ke tipe file yang diterima
                 up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{uploader_idx}")
-                up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
+                up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt", "docx"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
                 st.session_state.temp_image = up_img
                 st.session_state.temp_doc = up_doc
 
