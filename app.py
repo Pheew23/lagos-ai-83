@@ -1,4 +1,5 @@
 import io
+import os
 import re
 import json
 import uuid
@@ -12,6 +13,7 @@ from typing import List, Dict, Any, Optional
 import requests
 from bs4 import BeautifulSoup
 from docx import Document
+from pptx import Presentation
 import speech_recognition as sr
 import streamlit as st
 import streamlit.components.v1 as components
@@ -27,7 +29,7 @@ API_KEY = st.secrets["NVIDIA_API_KEY"]
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 MODEL_MAPPING = {
-    "openai/gpt-oss-120b": "1. Flash (text only",
+    "openai/gpt-oss-120b": "1. Flash (text only)",
     "thinkingmachines/inkling": "2. Pro(text only)",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "3. Pro (Analisis)",
     "google/diffusiongemma-26b-a4b-it": "4. Stable",
@@ -35,23 +37,37 @@ MODEL_MAPPING = {
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
 }
 
-# [FITUR BARU] Instruksi spesifik agar AI memberikan format HTML yang bisa dirender
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, asisten analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
 
 ATURAN KETAT UNTUK MERESPONS:
-1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI pengguna secara spesifik bertanya tentang identitas Anda (contoh: "Siapa kamu?", "Buatan siapa kamu?", atau "Apa kemampuanmu?").
+1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI pengguna secara spesifik bertanya tentang identitas Anda (contoh: "Siapa kamu?", "Buatan siapa kamu?").
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi pengenalan diri.
-3. Dilarang keras menyebutkan identitas model AI dasar Anda (seperti GPT, Llama, Nemotron, dll). Anda hanya Lagøs AI 9.1.
+3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 
-ATURAN PEMBUATAN APLIKASI:
-Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode berikut:
-```html
-<!DOCTYPE html>
-<html>
-...
-</html>
+ATURAN PEMBUATAN APLIKASI WEB (HTML):
+Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html.
+
+ATURAN PEMBUATAN PRESENTASI (PPT):
+Jika pengguna meminta Anda untuk merangkum teks/file menjadi presentasi atau membuat PPT, Anda HARUS bertindak sebagai Art Director. Analisis topiknya dan pilih TEMA yang paling cocok dari daftar ini: "bisnis", "kreatif", "akademik", atau "gelap".
+Rangkum materi menjadi poin-poin presentasi dan kembalikan datanya MURNI dalam format JSON di dalam blok kode json berikut (tanpa tambahan teks lain):
+```json
+{
+  "judul_presentasi": "Judul Utama PPT",
+  "rekomendasi_tema": "bisnis",
+  "slides": [
+    {
+      "slide_type": "title",
+      "title": "Judul Presentasi Utama",
+      "content": "Sub-judul / Nama Penulis"
+    },
+    {
+      "slide_type": "content",
+      "title": "Judul Slide 1",
+      "content": ["Poin penting 1", "Poin penting 2", "Poin penting 3"]
+    }
+  ]
+}
 ```"""
-
 
 # ==========================================
 # 2. MANAJER DATABASE
@@ -115,11 +131,11 @@ class DatabaseManager:
             rows = c.fetchall()
             
         msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for r, c in rows:
+        for r, content_str in rows:
             try:
-                msgs.append({"role": r, "content": json.loads(c)})
+                msgs.append({"role": r, "content": json.loads(content_str)})
             except json.JSONDecodeError:
-                msgs.append({"role": r, "content": c})
+                msgs.append({"role": r, "content": content_str})
         return msgs
 
     @classmethod
@@ -144,7 +160,6 @@ class DatabaseManager:
             c.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
             c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
             conn.commit()
-
 
 # ==========================================
 # 3. UTILITIES & PEMROSESAN MULTIMEDIA
@@ -227,12 +242,74 @@ class MediaUtils:
         except Exception as e:
             return f"Error saat membaca link: {str(e)}"
 
-    # [FITUR BARU] Mengekstrak kode HTML dari jawaban AI
     @staticmethod
     def ekstrak_kode_html(teks: str) -> Optional[str]:
         match = re.search(r'```html\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
         return match.group(1) if match else None
 
+    @staticmethod
+    def ekstrak_json_ppt(teks: str) -> Optional[dict]:
+        match = re.search(r'```json\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    @staticmethod
+    def buat_file_ppt(data_json: dict) -> io.BytesIO:
+        tema_pilihan = data_json.get("rekomendasi_tema", "bisnis").lower()
+        peta_template = {
+            "bisnis": "tema_bisnis.pptx",
+            "kreatif": "tema_kreatif.pptx",
+            "akademik": "tema_akademik.pptx",
+            "gelap": "tema_gelap.pptx"
+        }
+        
+        file_template = peta_template.get(tema_pilihan, "tema_bisnis.pptx")
+        
+        if os.path.exists(file_template):
+            prs = Presentation(file_template)
+        else:
+            prs = Presentation()
+            
+        for slide_data in data_json.get("slides", []):
+            stype = slide_data.get("slide_type", "content")
+            if stype == "title":
+                slide_layout = prs.slide_layouts[0]
+                slide = prs.slides.add_slide(slide_layout)
+                try:
+                    slide.shapes.title.text = slide_data.get("title", "")
+                    slide.placeholders[1].text = slide_data.get("content", "")
+                except Exception:
+                    pass
+            else:
+                slide_layout = prs.slide_layouts[1]
+                slide = prs.slides.add_slide(slide_layout)
+                try:
+                    slide.shapes.title.text = slide_data.get("title", "")
+                    body = slide.placeholders[1]
+                    tf = body.text_frame
+                    content = slide_data.get("content", [])
+                    
+                    if isinstance(content, list):
+                        for i, poin in enumerate(content):
+                            if i == 0:
+                                tf.text = poin
+                            else:
+                                p = tf.add_paragraph()
+                                p.text = poin
+                                p.level = 0
+                    else:
+                        tf.text = str(content)
+                except Exception:
+                    pass
+                    
+        bio = io.BytesIO()
+        prs.save(bio)
+        bio.seek(0)
+        return bio
 
 # ==========================================
 # 4. KOMPONEN UI & TAMPILAN
@@ -246,88 +323,48 @@ def inject_custom_css():
             footer {visibility: hidden;}
             
             .header-title {
-                text-align: center;
-                font-size: 2.2rem;
-                font-weight: 700;
+                text-align: center; font-size: 2.2rem; font-weight: 700;
                 background: linear-gradient(90deg, #7d4eff, #00d2ff);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 0px;
-                padding-top: 10px;
+                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                margin-bottom: 0px; padding-top: 10px;
             }
             .header-subtitle {
-                text-align: center;
-                color: var(--text-color);
-                opacity: 0.7;
-                font-size: 0.95rem;
-                font-weight: 300;
-                margin-bottom: 30px;
+                text-align: center; color: var(--text-color); opacity: 0.7;
+                font-size: 0.95rem; font-weight: 300; margin-bottom: 30px;
             }
-            
             .stChatMessage:nth-child(even) {
                 background-color: var(--secondary-background-color) !important;
-                border-radius: 12px;
-                padding: 1rem;
+                border-radius: 12px; padding: 1rem;
             }
-            
             .file-pill {
-                display: inline-block;
-                background: var(--secondary-background-color);
-                color: var(--text-color);
-                padding: 4px 14px;
-                border-radius: 20px;
-                font-size: 0.8rem;
-                margin-right: 8px;
-                margin-bottom: 12px;
+                display: inline-block; background: var(--secondary-background-color);
+                color: var(--text-color); padding: 4px 14px; border-radius: 20px;
+                font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px;
                 border: 1px solid var(--border-color);
             }
-
             [data-testid="stHorizontalBlock"] { align-items: center !important; }
-
             [data-testid="stPopover"] button {
-                border-radius: 50% !important;
-                height: 48px !important;
-                width: 48px !important;
-                padding: 0 !important;
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                border: 1px solid var(--border-color) !important;
-                background-color: transparent !important;
-                transition: all 0.3s ease !important;
+                border-radius: 50% !important; height: 48px !important; width: 48px !important;
+                padding: 0 !important; display: flex !important; justify-content: center !important;
+                align-items: center !important; border: 1px solid var(--border-color) !important;
+                background-color: transparent !important; transition: all 0.3s ease !important;
             }
             [data-testid="stPopover"] button:hover {
-                border-color: #7d4eff !important;
-                background-color: rgba(125, 78, 255, 0.1) !important;
-                color: #7d4eff !important;
-                transform: scale(1.05) !important;
+                border-color: #7d4eff !important; background-color: rgba(125, 78, 255, 0.1) !important;
+                color: #7d4eff !important; transform: scale(1.05) !important;
             }
-            
             [data-testid="stSidebar"] .stButton > button {
-                border-radius: 8px !important;
-                padding: 0.5rem 1rem !important;
-                text-align: left !important;
-                justify-content: flex-start !important;
+                border-radius: 8px !important; padding: 0.5rem 1rem !important;
+                text-align: left !important; justify-content: flex-start !important;
             }
             [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button {
-                background-color: transparent !important;
-                border: 1px solid transparent !important;
-                justify-content: center !important;
-                padding: 0.5rem 0 !important;
-                color: #888888 !important;
-                transition: all 0.2s ease;
+                background-color: transparent !important; border: 1px solid transparent !important;
+                justify-content: center !important; padding: 0.5rem 0 !important;
+                color: #888888 !important; transition: all 0.2s ease;
             }
             [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button:hover {
-                border: 1px solid #ff4b4b !important;
-                color: #ff4b4b !important;
+                border: 1px solid #ff4b4b !important; color: #ff4b4b !important;
                 background-color: rgba(255, 75, 75, 0.1) !important;
-            }
-            [data-testid="stSidebar"] .stButton > button p {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                width: 100%;
-                margin: 0;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -387,16 +424,12 @@ def inject_auto_scroll():
         </script>
     """, height=0)
 
-# [FITUR BARU] Fungsi Dialog Modal untuk Web App Preview (DIPERBARUI)
 @st.dialog("🌐 Web App Preview", width="large")
 def render_webapp_modal(html_code: str):
     st.info("💡 Interaksi dengan Web App di bawah ini. Tekan 'X' di sudut kanan atas untuk menutup.")
-    
-    # --- PERBAIKAN: Inject script agar semua link terbuka di tab baru ---
     injection = """
     <base target="_blank">
     <script>
-        // Mencegah link me-refresh frame utama
         document.addEventListener("click", function(e) {
             var target = e.target.closest("a");
             if(target && target.href) {
@@ -405,17 +438,11 @@ def render_webapp_modal(html_code: str):
         });
     </script>
     """
-    
-    # Sisipkan injection tepat setelah tag <head> jika ada, jika tidak taruh di paling atas
     if re.search(r'<head[^>]*>', html_code, re.IGNORECASE):
         html_code = re.sub(r'(<head[^>]*>)', r'\1\n' + injection, html_code, count=1, flags=re.IGNORECASE)
     else:
         html_code = injection + "\n" + html_code
-    # -------------------------------------------------------------------
-
-    # Render komponen HTML dengan tinggi 600px dan bisa di-scroll
     components.html(html_code, height=600, scrolling=True)
-
 
 # ==========================================
 # 5. INISIALISASI & SETUP APLIKASI
@@ -433,7 +460,6 @@ def init_session_state():
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
-
 
 # ==========================================
 # 6. LOGIKA UTAMA APLIKASI
@@ -474,11 +500,9 @@ def main():
         render_login_ui()
         st.stop()
     
-    # --- HEADER UTAMA ---
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Premium Multimodal Assistant</div>', unsafe_allow_html=True)
 
-    # --- SIDEBAR PENGATURAN ---
     with st.sidebar:
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
         
@@ -561,34 +585,44 @@ def main():
             ''', unsafe_allow_html=True
         )
 
-    # --- AREA OBROLAN UTAMA ---
     if len(st.session_state.messages) == 1:
         st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap. Lampirkan gambar/dokumen atau bicara melalui mikrofon.</p>", unsafe_allow_html=True)
 
-    # [FITUR BARU] Looping untuk menampilkan pesan dan mendeteksi ketersediaan Web App
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
         with st.chat_message(message["role"]):
             content = message["content"]
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
             
-            # Tampilkan teks markdown standar
             st.markdown(text_disp)
             
-            # Jika role adalah assistant, periksa apakah ada kode HTML
             if message["role"] == "assistant":
                 html_code = MediaUtils.ekstrak_kode_html(text_disp)
                 if html_code:
-                    st.write("") # Memberi sedikit jarak
-                    # Tampilkan tombol untuk membuka Pop-up
+                    st.write("") 
                     if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
                         render_webapp_modal(html_code)
+                
+                json_ppt = MediaUtils.ekstrak_json_ppt(text_disp)
+                if json_ppt:
+                    st.write("")
+                    ppt_file = MediaUtils.buat_file_ppt(json_ppt)
+                    nama_file = f"{json_ppt.get('judul_presentasi', 'Lagøs_Presentation')}.pptx"
+                    
+                    st.download_button(
+                        label="📊 Unduh Presentasi (.PPTX)",
+                        data=ppt_file,
+                        file_name=nama_file.replace(" ", "_"),
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key=f"btn_ppt_{idx}",
+                        use_container_width=True,
+                        type="primary"
+                    )
 
     st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
-    # --- AREA INPUT & PEMROSESAN ---
     with st.container():
         uploader_idx = st.session_state.uploader_key
         current_img = st.session_state.get(f"img_{uploader_idx}")
@@ -622,7 +656,6 @@ def main():
                 key=f"mic_{uploader_idx}"
             )
 
-    # --- LOGIKA PEMROSESAN PESAN ---
     prompt = prompt_text
     
     if audio_bytes and not prompt_text:
