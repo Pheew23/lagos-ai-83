@@ -6,3 +6,4 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # Mengimpor aplikasi Flask dari app.py
 from app import app as application
+html harus berupa bentuk jadi yang siap.
