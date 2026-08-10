@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
 import requests
+import yfinance as yf  # Library baru untuk data pasar
 from bs4 import BeautifulSoup
 from docx import Document
 from pptx import Presentation
@@ -39,11 +40,20 @@ MODEL_MAPPING = {
 
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, asisten analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
 
-ATURAN KETAT UNTUK MERESPONS:
+ATURAN KETAT UNTUK MERESPONS UMUM:
 1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI pengguna secara spesifik bertanya tentang identitas Anda (contoh: "Siapa kamu?", "Buatan siapa kamu?").
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi pengenalan diri.
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
+
+ATURAN ANALISIS TRADING (LONG & SHORT):
+Jika pengguna bertanya tentang prospek pasar, koin, saham, atau kapan harus LONG/SHORT, dan sistem melampirkan [DATA PASAR TERBARU]:
+1. Bertindaklah sebagai Master Trader Institusional. 
+2. Analisis tren dari data harga (Open, High, Low, Close, Volume) yang diberikan.
+3. Tentukan probabilitas kecenderungan arah pasar (Bullish/Bearish).
+4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD (Tunggu/Jangan Masuk)".
+5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL) yang logis berdasarkan rentang harga (High/Low) terlampir.
+6. Berikan rasionalisasi singkat mengapa Anda memilih keputusan tersebut.
 
 ATURAN PEMBUATAN APLIKASI WEB (HTML):
 Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html dan lakukan yang terbaik yang bisa anda lakukan.
@@ -315,6 +325,29 @@ class MediaUtils:
         prs.save(bio)
         bio.seek(0)
         return bio
+
+class MarketUtils:
+    @staticmethod
+    def ambil_data_pasar(simbol_ticker: str) -> str:
+        """Mengambil data 5 hari terakhir dari yfinance"""
+        try:
+            # Jika kripto, biasanya pakai -USD (contoh: BTC-USD)
+            if not simbol_ticker.endswith("-USD") and len(simbol_ticker) <= 5:
+                # Coba deteksi apakah ini kripto populer
+                kripto_populer = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']
+                if simbol_ticker.upper() in kripto_populer:
+                    simbol_ticker = f"{simbol_ticker.upper()}-USD"
+            
+            ticker = yf.Ticker(simbol_ticker)
+            hist = ticker.history(period="5d")
+            if hist.empty:
+                return f"Data pasar untuk '{simbol_ticker}' tidak ditemukan."
+            
+            # Format data agar mudah dibaca AI
+            data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
+            return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
+        except Exception as e:
+            return f"Gagal mengambil data pasar: {str(e)}"
 
 # ==========================================
 # 4. KOMPONEN UI & TAMPILAN
@@ -643,7 +676,6 @@ def main():
         with col_attach:
             with st.popover("➕"): 
                 st.markdown("**Lampirkan File**")
-                # DI SINI PERUBAHANNYA: docx ditambahkan ke tipe file yang diterima
                 up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{uploader_idx}")
                 up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt", "docx"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
                 st.session_state.temp_image = up_img
@@ -697,6 +729,18 @@ def main():
                     teks_web = MediaUtils.ambil_teks_dari_link(url)
                     teks_web_singkat = teks_web[:4000]
                     teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{teks_web_singkat}\n[AKHIR ISI WEBSITE]\n"
+
+        # --- TAMBAHAN LOGIKA TRADING ---
+        # Deteksi jika user meminta analisis ticker (misal: "analisis BTC", "kapan short AAPL")
+        kata_kunci_trading = ["analisis", "short", "long", "beli", "jual", "prospek", "harga"]
+        if any(kata in prompt.lower() for kata in kata_kunci_trading):
+            # Mencari kata dengan huruf kapital yang mungkin adalah Ticker (BTC, AAPL, BBCA.JK)
+            potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
+            if potensi_ticker:
+                with st.spinner(f"Mengambil data pasar real-time untuk {potensi_ticker[0]}..."):
+                    data_pasar = MarketUtils.ambil_data_pasar(potensi_ticker[0])
+                    teks_tambahan += f"\n[DATA PASAR TERBARU]\n{data_pasar}\n[Gunakan data ini untuk analisis LONG/SHORT]\n"
+        # -------------------------------
 
         final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
