@@ -10,3 +10,4 @@ firebase-admin
 pypdf
 starlette<0.36.0
 python-pptx
+yfinance
