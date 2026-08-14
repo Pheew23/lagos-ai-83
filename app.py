@@ -731,10 +731,8 @@ def main():
                     teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{teks_web_singkat}\n[AKHIR ISI WEBSITE]\n"
 
         # --- TAMBAHAN LOGIKA TRADING ---
-        # Deteksi jika user meminta analisis ticker (misal: "analisis BTC", "kapan short AAPL")
         kata_kunci_trading = ["analisis", "short", "long", "beli", "jual", "prospek", "harga"]
         if any(kata in prompt.lower() for kata in kata_kunci_trading):
-            # Mencari kata dengan huruf kapital yang mungkin adalah Ticker (BTC, AAPL, BBCA.JK)
             potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
             if potensi_ticker:
                 with st.spinner(f"Mengambil data pasar real-time untuk {potensi_ticker[0]}..."):
@@ -772,20 +770,85 @@ def main():
                         full_response = f"![Gambar yang Dihasilkan]({image_url})"
                         placeholder.markdown(full_response)
                 else:
-                    response_stream = client.chat.completions.create(
-                        model=selected_model, 
-                        messages=st.session_state.messages,
-                        temperature=0.7,
-                        max_tokens=12096,
-                        stream=True
-                    )
-                    for chunk in response_stream:
-                        if chunk.choices and len(chunk.choices) > 0:
-                            delta = chunk.choices[0].delta.content
-                            if delta:
-                                full_response += delta
-                                placeholder.markdown(full_response + "▌")
-                    placeholder.markdown(full_response)
+                    # --- TAMBAHAN FITUR 2 TAHAP UNTUK PEMBUATAN WEB/APLIKASI ---
+                    kata_kunci_web = ["buat aplikasi", "bikin aplikasi", "buat web", "bikin web", "buatkan aplikasi", "buatkan web", "aplikasi web", "web app", "html"]
+                    is_web_app = any(kata in prompt.lower() for kata in kata_kunci_web)
+
+                    if is_web_app:
+                        st.info("⏳ Mode Web/App: Memproses dalam 2 tahap (Tahap 1: UI/HTML & CSS)...")
+                        
+                        tahap1_msgs = st.session_state.messages.copy()
+                        last_msg_content = tahap1_msgs[-1]["content"]
+                        tambahan_instruksi = "\n\n[INSTRUKSI SISTEM PENTING]: Kerjakan pembuatan aplikasi ini dalam 2 TAHAP agar kode tidak terpotong (timeout/max token).\nTAHAP 1: Buat dan tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok ```html. PENTING: JANGAN tutup tag </body> dan </html>, dan JANGAN berikan kode JavaScript di tahap ini."
+                        
+                        # Pastikan format kompatibel walau pengguna melampirkan gambar
+                        if isinstance(last_msg_content, list):
+                            new_content = last_msg_content.copy()
+                            new_content[0] = {"type": "text", "text": new_content[0]["text"] + tambahan_instruksi}
+                            tahap1_msgs[-1] = {"role": "user", "content": new_content}
+                        else:
+                            tahap1_msgs[-1] = {"role": "user", "content": str(last_msg_content) + tambahan_instruksi}
+                        
+                        response_stream_1 = client.chat.completions.create(
+                            model=selected_model, 
+                            messages=tahap1_msgs,
+                            temperature=0.7,
+                            max_tokens=12096,
+                            stream=True
+                        )
+                        for chunk in response_stream_1:
+                            if chunk.choices and len(chunk.choices) > 0:
+                                delta = chunk.choices[0].delta.content
+                                if delta:
+                                    full_response += delta
+                                    placeholder.markdown(full_response + "▌")
+                                    
+                        st.info("⏳ Mode Web/App: Memproses Tahap 2 (Logika JavaScript & Finalisasi)...")
+                        
+                        tahap2_msgs = tahap1_msgs.copy()
+                        tahap2_msgs.append({"role": "assistant", "content": full_response})
+                        tahap2_msgs.append({
+                            "role": "user",
+                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka blok kode markdown baru (jangan tulis ```html atau ```javascript lagi), sambung langsung saja agar menyatu menjadi satu blok kode HTML yang sempurna."
+                        })
+                        
+                        response_stream_2 = client.chat.completions.create(
+                            model=selected_model, 
+                            messages=tahap2_msgs,
+                            temperature=0.7,
+                            max_tokens=12096,
+                            stream=True
+                        )
+                        for chunk in response_stream_2:
+                            if chunk.choices and len(chunk.choices) > 0:
+                                delta = chunk.choices[0].delta.content
+                                if delta:
+                                    full_response += delta
+                                    placeholder.markdown(full_response + "▌")
+                                    
+                        # Pastikan blok ditutup jika AI lupa menutupnya di akhir
+                        if full_response.count("```") % 2 != 0:
+                            full_response += "\n```"
+                            
+                        placeholder.markdown(full_response)
+                        
+                    else:
+                        # --- PROSES NORMAL UNTUK PERTANYAAN BIASA ---
+                        response_stream = client.chat.completions.create(
+                            model=selected_model, 
+                            messages=st.session_state.messages,
+                            temperature=0.7,
+                            max_tokens=12096,
+                            stream=True
+                        )
+                        for chunk in response_stream:
+                            if chunk.choices and len(chunk.choices) > 0:
+                                delta = chunk.choices[0].delta.content
+                                if delta:
+                                    full_response += delta
+                                    placeholder.markdown(full_response + "▌")
+                        placeholder.markdown(full_response)
+                    # -----------------------------------------------------------
                 
                 st.session_state.messages[-1] = {"role": "user", "content": prompt}
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
