@@ -30,7 +30,7 @@ API_KEY = st.secrets["NVIDIA_API_KEY"]
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 MODEL_MAPPING = {
-    "minimaxai/minimax-m3": "1. Flash (text only)",
+    "minimaxai/minimax-m3": "1. Flash (Pro)",
     "google/diffusiongemma-26b-a4b-it": "2. Stable",
     "thinkingmachines/inkling": "3. Pro(text only)",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "4. Pro (Analisis)",
