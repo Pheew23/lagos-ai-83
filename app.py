@@ -660,7 +660,7 @@ def main():
                         if last_msg_content.strip().endswith("```"):
                             last_msg_content = last_msg_content.rstrip("` \n") 
                             
-                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=12096, stream=True)
+                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.4, max_tokens=14096, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
