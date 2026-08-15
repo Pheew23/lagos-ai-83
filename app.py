@@ -30,6 +30,9 @@ DB_NAME = 'lagos_multiuser.db'
 API_KEY = st.secrets["NVIDIA_API_KEY"]
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
+# Trik untuk menghindari bug render markdown di antarmuka web
+B3 = "`" * 3
+
 MODEL_MAPPING = {
     "minimaxai/minimax-m3": "1. Flash (Pro)",
     "google/diffusiongemma-26b-a4b-it": "2. Stable",
@@ -58,23 +61,25 @@ Jika pengguna bertanya tentang prospek pasar, koin, saham, atau kapan harus LONG
 4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD (Tunggu/Jangan Masuk)".
 5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL) yang logis.
 
-ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan kodenya di dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html.
+ATURAN KETAT PEMBUATAN APLIKASI WEB (HTML):
+1. JANGAN PERNAH membuat atau menulis kode aplikasi/web KECUALI pengguna secara EKSPLISIT dan JELAS memerintahkan Anda untuk membuatnya (contoh perintah: "buatkan saya aplikasi...", "tulis kode web...", "bikin web app...").
+2. Jika pengguna hanya bertanya teori, berdiskusi, atau sekadar menyebut kata "aplikasi" TANPA menyuruh membuatnya, berikan penjelasan teks biasa TANPA menulis kode HTML.
+3. Jika pengguna BENAR-BENAR memerintahkan pembuatan aplikasi, Anda HARUS menuliskan kodenya di dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
 Jika pengguna meminta Anda untuk membuat dokumen, artikel, surat, makalah, atau laporan dalam bentuk Word, DOCX, atau PDF, Anda HARUS merangkum isi kontennya dan menaruhnya MURNI di dalam blok kode `document`.
 Contoh:
-```document
+%sdocument
 # Judul Dokumen
 ## Sub Judul
 Ini adalah paragraf dari dokumen...
 - Poin 1
 - Poin 2
-```
+%s
 
 ATURAN PEMBUATAN PRESENTASI (PPT):
 Jika diminta merangkum teks menjadi PPT, Anda HARUS bertindak sebagai Art Director. Pilih TEMA ("bisnis", "kreatif", "akademik", atau "gelap"). Kembalikan MURNI dalam JSON:
-```json
+%sjson
 {
   "judul_presentasi": "Judul Utama PPT",
   "rekomendasi_tema": "bisnis",
@@ -86,7 +91,7 @@ Jika diminta merangkum teks menjadi PPT, Anda HARUS bertindak sebagai Art Direct
     }
   ]
 }
-```"""
+%s""" % (B3, B3, B3, B3)
 
 # ==========================================
 # 2. MANAJER DATABASE
@@ -229,7 +234,7 @@ class MediaUtils:
 
     @staticmethod
     def ekstrak_dokumen(teks: str) -> Optional[str]:
-        match = re.search(r'```document\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
+        match = re.search(r'`{3}document\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         return match.group(1) if match else None
 
     @staticmethod
@@ -309,12 +314,12 @@ class MediaUtils:
 
     @staticmethod
     def ekstrak_kode_html(teks: str) -> Optional[str]:
-        match = re.search(r'```html\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
+        match = re.search(r'`{3}html\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         return match.group(1) if match else None
 
     @staticmethod
     def ekstrak_json_ppt(teks: str) -> Optional[dict]:
-        match = re.search(r'```json\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
+        match = re.search(r'`{3}json\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         if match:
             try: return json.loads(match.group(1))
             except: pass
@@ -653,14 +658,14 @@ def main():
                         tahap2_msgs = copy.deepcopy(st.session_state.messages)
                         tahap2_msgs.append({
                             "role": "user",
-                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya."
+                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka awalan blok markdown baru (jangan tulis " + B3 + "html atau " + B3 + "javascript lagi), sambung langsung saja agar menyatu."
                         })
                         
                         last_msg_content = st.session_state.messages[-1]["content"]
-                        if last_msg_content.strip().endswith("```"):
+                        if last_msg_content.strip().endswith(B3):
                             last_msg_content = last_msg_content.rstrip("` \n") 
                             
-                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.4, max_tokens=14096, stream=True)
+                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=12096, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
@@ -669,7 +674,7 @@ def main():
                                     placeholder.markdown(last_msg_content + "\n" + full_response + "▌")
                                     
                         gabungan_kode = last_msg_content + "\n" + full_response
-                        if not gabungan_kode.strip().endswith("```"): gabungan_kode += "\n```"
+                        if not gabungan_kode.strip().endswith(B3): gabungan_kode += "\n" + B3
                         
                         placeholder.markdown(gabungan_kode)
                         st.session_state.messages[-1]["content"] = gabungan_kode 
@@ -680,7 +685,7 @@ def main():
                         
                         if is_web_app:
                             st.info("⏳ Mode Web/App: Memproses Tahap 1...")
-                            instruksi_tahap_1 = "\n\n[INSTRUKSI SISTEM PENTING]: Karena potensi timeout, kerjakan pembuatan web dalam 2 TAHAP. TAHAP 1: Tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok ```html. PENTING: JANGAN tulis JavaScript, dan JANGAN tutup tag </body> atau </html> pada tahap ini."
+                            instruksi_tahap_1 = "\n\n[INSTRUKSI SISTEM PENTING]: Karena potensi timeout, kerjakan pembuatan web dalam 2 TAHAP. TAHAP 1: Tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok " + B3 + "html. PENTING: JANGAN tulis JavaScript, dan JANGAN tutup tag </body> atau </html> pada tahap ini."
                             if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
                             else: payload_msgs[-1]["content"] += instruksi_tahap_1
 
