@@ -652,7 +652,7 @@ def main():
                             "content": "TAHAP 2: Lanjutkan pembuatan aplikasi. Berikan HANYA kode JavaScript-nya saja. Jangan ulangi HTML/CSS dari Tahap 1."
                         })
                         
-                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=8000, stream=True)
+                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
