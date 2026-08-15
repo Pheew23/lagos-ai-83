@@ -45,41 +45,39 @@ MODEL_MAPPING = {
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, asisten analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
 
 ATURAN KETAT UNTUK MERESPONS UMUM:
-1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI pengguna secara spesifik bertanya tentang identitas Anda.
+1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI ditanya secara spesifik tentang identitas Anda.
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi.
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 
 ATURAN KONFIRMASI FORMAT OUTPUT:
-Jika pengguna memerintahkan Anda untuk membuat sesuatu (misalnya tugas, rencana, rangkuman, dll) namun BELUM menyebutkan format spesifik, Anda WAJIB menahan diri untuk tidak langsung membuatnya dan HARUS bertanya kembali kepada pengguna dengan kalimat: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan kontennya sebelum pengguna memilih.
+Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
 
 ATURAN ANALISIS TRADING (LONG & SHORT):
-Jika pengguna bertanya tentang prospek pasar, koin, saham, atau kapan harus LONG/SHORT, dan sistem melampirkan [DATA PASAR TERBARU]:
+Jika ada [DATA PASAR TERBARU]:
 1. Bertindaklah sebagai Master Trader Institusional. 
 2. Analisis tren dari data harga yang diberikan.
 3. Tentukan probabilitas kecenderungan arah pasar (Bullish/Bearish).
-4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD (Tunggu/Jangan Masuk)".
-5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL) yang logis.
+4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD".
+5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL).
 
 ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Perhatikan baik-baik [STATUS SAKLAR] yang dikirimkan bersama pertanyaan. Jika pengguna menyalakan saklar (ON), Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika saklar MATI (OFF), Anda DILARANG menulis kode HTML/aplikasi sama sekali.
+Perhatikan baik-baik instruksi sistem mengenai SAKLAR MODE. Jika mode aplikasi AKTIF, Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
-Jika pengguna meminta Anda untuk membuat dokumen, artikel, surat, makalah, atau laporan dalam bentuk Word, DOCX, atau PDF, Anda HARUS merangkum isi kontennya dan menaruhnya MURNI di dalam blok kode `document`.
+Jika diminta membuat dokumen/artikel/laporan (Word/PDF), rangkum kontennya MURNI di dalam blok kode `document`.
 Contoh:
 %sdocument
 # Judul Dokumen
 ## Sub Judul
-Ini adalah paragraf dari dokumen...
-- Poin 1
-- Poin 2
+Isi paragraf...
 %s
 
 ATURAN PEMBUATAN PRESENTASI (PPT):
-Jika diminta merangkum teks menjadi PPT, Anda HARUS bertindak sebagai Art Director. Pilih TEMA ("bisnis", "kreatif", "akademik", atau "gelap"). Kembalikan MURNI dalam JSON:
+Jika diminta PPT, kembalikan MURNI dalam JSON:
 %sjson
 {
-  "judul_presentasi": "Judul Utama PPT",
+  "judul_presentasi": "Judul PPT",
   "rekomendasi_tema": "bisnis",
   "slides": [
     {
@@ -256,7 +254,7 @@ class MediaUtils:
         try:
             from fpdf import FPDF
         except ImportError:
-            raise ImportError("Fitur PDF diblokir karena library fpdf2 belum diinstal. Jalankan di terminal: pip install fpdf2")
+            raise ImportError("Fitur PDF diblokir karena library fpdf2 belum diinstal.")
             
         pdf = FPDF()
         pdf.add_page()
@@ -268,7 +266,6 @@ class MediaUtils:
             if not line:
                 pdf.ln(5)
                 continue
-                
             if line.startswith('# '):
                 pdf.set_font("helvetica", style="B", size=16)
                 pdf.multi_cell(0, 10, text=line[2:])
@@ -308,7 +305,7 @@ class MediaUtils:
             soup = BeautifulSoup(response.text, 'html.parser')
             text = ' '.join([p.get_text() for p in soup.find_all('p')])
             return re.sub(r'\s+', ' ', text).strip()
-        except Exception as e: return f"Error: {str(e)}"
+        except Exception as e: return f"Error Link: {str(e)}"
 
     @staticmethod
     def ekstrak_kode_html(teks: str) -> Optional[str]:
@@ -475,9 +472,7 @@ def main():
 
     with st.sidebar:
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
-        
         st.divider()
-        
         if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -551,34 +546,18 @@ def main():
                     ppt_file = MediaUtils.buat_file_ppt(json_ppt)
                     st.download_button("📊 Unduh Presentasi (.PPTX)", data=ppt_file, file_name=f"{json_ppt.get('judul_presentasi', 'PPT')}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key=f"btn_ppt_{idx}", use_container_width=True, type="primary")
 
-                # Cek Dokumen PDF/DOCX baru
+                # Cek Dokumen PDF/DOCX
                 dokumen_teks = MediaUtils.ekstrak_dokumen(text_disp)
                 if dokumen_teks and not is_pending:
                     st.write("")
                     col_doc1, col_doc2 = st.columns(2)
                     with col_doc1:
                         docx_file = MediaUtils.buat_dokumen_docx(dokumen_teks)
-                        st.download_button(
-                            label="📄 Unduh (.DOCX)", 
-                            data=docx_file, 
-                            file_name="Dokumen_Lagos.docx", 
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-                            key=f"btn_docx_{idx}", 
-                            use_container_width=True, 
-                            type="primary"
-                        )
+                        st.download_button(label="📄 Unduh (.DOCX)", data=docx_file, file_name="Dokumen_Lagos.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"btn_docx_{idx}", use_container_width=True, type="primary")
                     with col_doc2:
                         try:
                             pdf_file = MediaUtils.buat_dokumen_pdf(dokumen_teks)
-                            st.download_button(
-                                label="📕 Unduh (.PDF)", 
-                                data=pdf_file, 
-                                file_name="Dokumen_Lagos.pdf", 
-                                mime="application/pdf", 
-                                key=f"btn_pdf_{idx}", 
-                                use_container_width=True, 
-                                type="primary"
-                            )
+                            st.download_button(label="📕 Unduh (.PDF)", data=pdf_file, file_name="Dokumen_Lagos.pdf", mime="application/pdf", key=f"btn_pdf_{idx}", use_container_width=True, type="primary")
                         except Exception as e:
                             st.error(str(e))
 
@@ -593,11 +572,9 @@ def main():
             st.session_state.tahap2_pending = False
             st.rerun()
 
-    # ==========================================
-    # POSISI BARU SAKLAR (Tepat di atas kolom chat)
-    # ==========================================
     with st.container():
-        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan jika Anda secara eksplisit meminta AI membuat web (HTML). Jika mati, AI hanya akan membalas dengan obrolan biasa.")
+        # SAKLAR APLIKASI
+        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML. Jika mati, AI akan menjawab biasa.")
         
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
@@ -628,11 +605,11 @@ def main():
             with st.chat_message("user"): st.markdown(prompt)
             teks_tambahan = ""
             
-            # INJEKSI LOGIKA SAKLAR APLIKASI
+            # INJEKSI STATUS SAKLAR 
             if app_mode:
-                teks_tambahan += "\n[STATUS SAKLAR: ON (MODE APLIKASI). Anda DIIZINKAN merender kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
+                teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
             else:
-                teks_tambahan += "\n[STATUS SAKLAR: OFF (MODE NORMAL). Anda DILARANG KERAS membuat atau menulis kode aplikasi web/HTML. Jawablah menggunakan teks biasa saja meskipun pengguna meminta dibuatkan aplikasi.]\n"
+                teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
             
             if st.session_state.temp_doc:
                 teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
@@ -667,18 +644,19 @@ def main():
                         st.session_state.messages.append({"role": "assistant", "content": f"![Gambar yang Dihasilkan]({image_url})"})
                 else:
                     if is_tahap2_exec:
-                        st.info("⏳ Memproses Tahap 2...")
+                        st.info("⏳ Memproses Tahap 2 (Finalisasi JavaScript)...")
                         tahap2_msgs = copy.deepcopy(st.session_state.messages)
                         tahap2_msgs.append({
                             "role": "user",
-                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka awalan blok markdown baru (jangan tulis " + B3 + "html atau " + B3 + "javascript lagi), sambung langsung saja agar menyatu."
+                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka awalan blok markdown baru, sambung langsung saja agar menyatu."
                         })
                         
                         last_msg_content = st.session_state.messages[-1]["content"]
                         if last_msg_content.strip().endswith(B3):
                             last_msg_content = last_msg_content.rstrip("` \n") 
                             
-                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=12096, stream=True)
+                        # max_tokens diturunkan ke 4000 untuk mencegah error 404 dari proxy NVIDIA
+                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
@@ -693,17 +671,17 @@ def main():
                         st.session_state.messages[-1]["content"] = gabungan_kode 
                         
                     else:
-                        # PROSES TAHAP 1 (Hanya dieksekusi jika SAKLAR ON dan ada kata kunci aplikasi)
                         is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
                         payload_msgs = copy.deepcopy(st.session_state.messages)
                         
                         if is_web_app:
                             st.info("⏳ Mode Web/App (Saklar ON): Memproses Tahap 1...")
-                            instruksi_tahap_1 = "\n\n[INSTRUKSI SISTEM PENTING]: Karena potensi timeout, kerjakan pembuatan web dalam 2 TAHAP. TAHAP 1: Tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok " + B3 + "html. PENTING: JANGAN tulis JavaScript, dan JANGAN tutup tag </body> atau </html> pada tahap ini."
+                            instruksi_tahap_1 = "\n\n[PENTING]: Kerjakan dalam 2 TAHAP. TAHAP 1: Buat kerangka HTML & CSS saja di dalam blok " + B3 + "html. JANGAN tulis JavaScript dan JANGAN tutup tag HTML/BODY pada tahap ini."
                             if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
                             else: payload_msgs[-1]["content"] += instruksi_tahap_1
 
-                        response_stream = client.chat.completions.create(model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=12096, stream=True)
+                        # max_tokens diturunkan ke 4000 untuk mencegah error 404 dari proxy NVIDIA
+                        response_stream = client.chat.completions.create(model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
@@ -730,7 +708,12 @@ def main():
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Kesalahan teknis: {str(e)}")
+                error_msg = str(e)
+                if "404" in error_msg:
+                    st.error("❌ Kesalahan 404: Model AI yang Anda pilih sedang tidak tersedia/down di server NVIDIA, atau limit teks terlalu besar. Silakan coba ganti Model AI di menu samping.")
+                else:
+                    st.error(f"Kesalahan teknis: {error_msg}")
+                    
                 if st.session_state.messages[-1]["role"] == "user": st.session_state.messages.pop()
 
 if __name__ == "__main__":
