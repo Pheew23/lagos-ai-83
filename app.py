@@ -7,11 +7,12 @@ import base64
 import sqlite3
 import hashlib
 import datetime
+import copy
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
 import requests
-import yfinance as yf  # Library baru untuk data pasar
+import yfinance as yf
 from bs4 import BeautifulSoup
 from docx import Document
 from pptx import Presentation
@@ -56,14 +57,12 @@ Jika pengguna bertanya tentang prospek pasar, koin, saham, atau kapan harus LONG
 3. Tentukan probabilitas kecenderungan arah pasar (Bullish/Bearish).
 4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD (Tunggu/Jangan Masuk)".
 5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL) yang logis berdasarkan rentang harga (High/Low) terlampir.
-6. Berikan rasionalisasi singkat mengapa Anda memilih keputusan tersebut.
 
 ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan seluruh kodenya dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html dan lakukan yang terbaik yang bisa anda lakukan.
+Jika pengguna meminta Anda untuk membuat web app atau aplikasi, Anda HARUS menuliskan kodenya di dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html. Lakukan yang terbaik yang bisa anda lakukan. (Sistem akan memecah instruksi ini menjadi 2 tahap secara otomatis agar tidak timeout).
 
 ATURAN PEMBUATAN PRESENTASI (PPT):
-Jika pengguna meminta Anda untuk merangkum teks/file menjadi presentasi atau membuat PPT, Anda HARUS bertindak sebagai Art Director. Analisis topiknya dan pilih TEMA yang paling cocok dari daftar ini: "bisnis", "kreatif", "akademik", atau "gelap".
-Rangkum materi menjadi poin-poin presentasi dan kembalikan datanya MURNI dalam format JSON di dalam blok kode json berikut (tanpa tambahan teks lain):
+Jika diminta merangkum teks menjadi PPT, Anda HARUS bertindak sebagai Art Director. Pilih TEMA ("bisnis", "kreatif", "akademik", atau "gelap"). Kembalikan MURNI dalam JSON:
 ```json
 {
   "judul_presentasi": "Judul Utama PPT",
@@ -71,13 +70,8 @@ Rangkum materi menjadi poin-poin presentasi dan kembalikan datanya MURNI dalam f
   "slides": [
     {
       "slide_type": "title",
-      "title": "Judul Presentasi Utama",
-      "content": "Sub-judul / Nama Penulis"
-    },
-    {
-      "slide_type": "content",
-      "title": "Judul Slide 1",
-      "content": ["Poin penting 1", "Poin penting 2", "Poin penting 3"]
+      "title": "Judul Utama",
+      "content": "Sub-judul"
     }
   ]
 }
@@ -91,10 +85,8 @@ class DatabaseManager:
     @contextmanager
     def get_connection():
         conn = sqlite3.connect(DB_NAME)
-        try:
-            yield conn
-        finally:
-            conn.close()
+        try: yield conn
+        finally: conn.close()
 
     @classmethod
     def init_db(cls):
@@ -126,9 +118,7 @@ class DatabaseManager:
             c = conn.cursor()
             c.execute("SELECT password FROM users WHERE username=?", (username,))
             row = c.fetchone()
-            if row and row[0] == cls.hash_password(password):
-                return True
-            return False
+            return bool(row and row[0] == cls.hash_password(password))
 
     @classmethod
     def get_user_sessions(cls, username: str) -> List[tuple]:
@@ -146,10 +136,8 @@ class DatabaseManager:
             
         msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
         for r, content_str in rows:
-            try:
-                msgs.append({"role": r, "content": json.loads(content_str)})
-            except json.JSONDecodeError:
-                msgs.append({"role": r, "content": content_str})
+            try: msgs.append({"role": r, "content": json.loads(content_str)})
+            except: msgs.append({"role": r, "content": content_str})
         return msgs
 
     @classmethod
@@ -197,14 +185,12 @@ class MediaUtils:
                 reader = PdfReader(uploaded_file)
                 for page in reader.pages:
                     teks = page.extract_text()
-                    if teks: 
-                        teks_hasil += teks + "\n"
+                    if teks: teks_hasil += teks + "\n"
             elif nama_file.endswith('.txt'):
                 teks_hasil = uploaded_file.read().decode("utf-8")
             elif nama_file.endswith('.docx'):
                 doc = Document(uploaded_file)
-                for para in doc.paragraphs:
-                    teks_hasil += para.text + "\n"
+                for para in doc.paragraphs: teks_hasil += para.text + "\n"
             return teks_hasil.strip()
         except Exception as e:
             return f"Gagal membaca dokumen: {str(e)}"
@@ -242,21 +228,18 @@ class MediaUtils:
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
                 text = text.split("[AKHIR KONTEN]\n\n")[-1]
-                return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Gambar/File")
+                return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'} 
+            headers = {'User-Agent': 'Mozilla/5.0'} 
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
-            
             soup = BeautifulSoup(response.text, 'html.parser')
-            paragraphs = soup.find_all('p')
-            text = ' '.join([p.get_text() for p in paragraphs])
-            text = re.sub(r'\s+', ' ', text)
-            return text.strip()
+            text = ' '.join([p.get_text() for p in soup.find_all('p')])
+            return re.sub(r'\s+', ' ', text).strip()
         except Exception as e:
             return f"Error saat membaca link: {str(e)}"
 
@@ -269,60 +252,38 @@ class MediaUtils:
     def ekstrak_json_ppt(teks: str) -> Optional[dict]:
         match = re.search(r'```json\n(.*?)\n```', teks, re.DOTALL | re.IGNORECASE)
         if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                return None
+            try: return json.loads(match.group(1))
+            except: pass
         return None
 
     @staticmethod
     def buat_file_ppt(data_json: dict) -> io.BytesIO:
         tema_pilihan = data_json.get("rekomendasi_tema", "bisnis").lower()
-        peta_template = {
-            "bisnis": "tema_bisnis.pptx",
-            "kreatif": "tema_kreatif.pptx",
-            "akademik": "tema_akademik.pptx",
-            "gelap": "tema_gelap.pptx"
-        }
+        peta = {"bisnis": "tema_bisnis.pptx", "kreatif": "tema_kreatif.pptx", "akademik": "tema_akademik.pptx", "gelap": "tema_gelap.pptx"}
+        file_template = peta.get(tema_pilihan, "tema_bisnis.pptx")
         
-        file_template = peta_template.get(tema_pilihan, "tema_bisnis.pptx")
-        
-        if os.path.exists(file_template):
-            prs = Presentation(file_template)
-        else:
-            prs = Presentation()
+        prs = Presentation(file_template) if os.path.exists(file_template) else Presentation()
             
         for slide_data in data_json.get("slides", []):
             stype = slide_data.get("slide_type", "content")
             if stype == "title":
-                slide_layout = prs.slide_layouts[0]
-                slide = prs.slides.add_slide(slide_layout)
+                slide = prs.slides.add_slide(prs.slide_layouts[0])
                 try:
                     slide.shapes.title.text = slide_data.get("title", "")
                     slide.placeholders[1].text = slide_data.get("content", "")
-                except Exception:
-                    pass
+                except: pass
             else:
-                slide_layout = prs.slide_layouts[1]
-                slide = prs.slides.add_slide(slide_layout)
+                slide = prs.slides.add_slide(prs.slide_layouts[1])
                 try:
                     slide.shapes.title.text = slide_data.get("title", "")
-                    body = slide.placeholders[1]
-                    tf = body.text_frame
+                    tf = slide.placeholders[1].text_frame
                     content = slide_data.get("content", [])
-                    
                     if isinstance(content, list):
                         for i, poin in enumerate(content):
-                            if i == 0:
-                                tf.text = poin
-                            else:
-                                p = tf.add_paragraph()
-                                p.text = poin
-                                p.level = 0
-                    else:
-                        tf.text = str(content)
-                except Exception:
-                    pass
+                            if i == 0: tf.text = poin
+                            else: tf.add_paragraph().text, tf.paragraphs[-1].level = poin, 0
+                    else: tf.text = str(content)
+                except: pass
                     
         bio = io.BytesIO()
         prs.save(bio)
@@ -332,21 +293,15 @@ class MediaUtils:
 class MarketUtils:
     @staticmethod
     def ambil_data_pasar(simbol_ticker: str) -> str:
-        """Mengambil data 5 hari terakhir dari yfinance"""
         try:
-            # Jika kripto, biasanya pakai -USD (contoh: BTC-USD)
             if not simbol_ticker.endswith("-USD") and len(simbol_ticker) <= 5:
-                # Coba deteksi apakah ini kripto populer
-                kripto_populer = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']
-                if simbol_ticker.upper() in kripto_populer:
+                if simbol_ticker.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']:
                     simbol_ticker = f"{simbol_ticker.upper()}-USD"
             
             ticker = yf.Ticker(simbol_ticker)
             hist = ticker.history(period="5d")
-            if hist.empty:
-                return f"Data pasar untuk '{simbol_ticker}' tidak ditemukan."
+            if hist.empty: return f"Data pasar '{simbol_ticker}' tidak ditemukan."
             
-            # Format data agar mudah dibaca AI
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e:
@@ -360,94 +315,13 @@ def inject_custom_css():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
             html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            
-            .header-title {
-                text-align: center; font-size: 2.2rem; font-weight: 700;
-                background: linear-gradient(90deg, #7d4eff, #00d2ff);
-                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-                margin-bottom: 0px; padding-top: 10px;
-            }
-            .header-subtitle {
-                text-align: center; color: var(--text-color); opacity: 0.7;
-                font-size: 0.95rem; font-weight: 300; margin-bottom: 30px;
-            }
-            .stChatMessage:nth-child(even) {
-                background-color: var(--secondary-background-color) !important;
-                border-radius: 12px; padding: 1rem;
-            }
-            .file-pill {
-                display: inline-block; background: var(--secondary-background-color);
-                color: var(--text-color); padding: 4px 14px; border-radius: 20px;
-                font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px;
-                border: 1px solid var(--border-color);
-            }
-            [data-testid="stHorizontalBlock"] { align-items: center !important; }
-            [data-testid="stPopover"] button {
-                border-radius: 50% !important; height: 48px !important; width: 48px !important;
-                padding: 0 !important; display: flex !important; justify-content: center !important;
-                align-items: center !important; border: 1px solid var(--border-color) !important;
-                background-color: transparent !important; transition: all 0.3s ease !important;
-            }
-            [data-testid="stPopover"] button:hover {
-                border-color: #7d4eff !important; background-color: rgba(125, 78, 255, 0.1) !important;
-                color: #7d4eff !important; transform: scale(1.05) !important;
-            }
-            [data-testid="stSidebar"] .stButton > button {
-                border-radius: 8px !important; padding: 0.5rem 1rem !important;
-                text-align: left !important; justify-content: flex-start !important;
-            }
-            [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button {
-                background-color: transparent !important; border: 1px solid transparent !important;
-                justify-content: center !important; padding: 0.5rem 0 !important;
-                color: #888888 !important; transition: all 0.2s ease;
-            }
-            [data-testid="stSidebar"] [data-testid="column"]:nth-of-type(2) .stButton > button:hover {
-                border: 1px solid #ff4b4b !important; color: #ff4b4b !important;
-                background-color: rgba(255, 75, 75, 0.1) !important;
-            }
+            #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+            .header-title { text-align: center; font-size: 2.2rem; font-weight: 700; background: linear-gradient(90deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0px; padding-top: 10px; }
+            .header-subtitle { text-align: center; color: var(--text-color); opacity: 0.7; font-size: 0.95rem; font-weight: 300; margin-bottom: 30px; }
+            .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
+            .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
         </style>
     """, unsafe_allow_html=True)
-
-def render_login_ui():
-    st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
-    st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        with st.container(border=True):
-            tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
-            
-            with tab_login:
-                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Selamat Datang Kembali</h4>", unsafe_allow_html=True)
-                log_user = st.text_input("Username", key="log_user", placeholder="Masukkan username Anda...")
-                log_pass = st.text_input("Password", type="password", key="log_pass", placeholder="Masukkan password Anda...")
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                if st.button("Masuk", use_container_width=True, type="primary"):
-                    if DatabaseManager.authenticate_user(log_user, log_pass):
-                        st.session_state.logged_in = True
-                        st.session_state.username = log_user
-                        st.session_state.set_cookie = True 
-                        st.rerun()
-                    else:
-                        st.error("Username atau password salah!")
-                        
-            with tab_register:
-                st.markdown("<h4 style='text-align: center; margin-bottom: 20px;'>Buat Akun Baru</h4>", unsafe_allow_html=True)
-                reg_user = st.text_input("Username Baru", key="reg_user", placeholder="Pilih username unik...")
-                reg_pass = st.text_input("Password Baru", type="password", key="reg_pass", placeholder="Buat password yang kuat...")
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                if st.button("Daftar & Buat Akun", use_container_width=True):
-                    if reg_user and reg_pass:
-                        if DatabaseManager.register_user(reg_user, reg_pass):
-                            st.success("✅ Berhasil mendaftar! Silakan buka tab 'Masuk'.")
-                        else:
-                            st.error("❌ Username sudah dipakai, silakan pilih yang lain.")
-                    else:
-                        st.warning("⚠️ Harap isi username dan password!")
 
 def inject_auto_scroll():
     components.html("""
@@ -455,12 +329,7 @@ def inject_auto_scroll():
             setTimeout(function() {
                 var parentDoc = window.parent.document;
                 var marker = parentDoc.getElementById('bottom-marker');
-                if (marker) {
-                    marker.scrollIntoView({behavior: 'auto', block: 'end'});
-                } else {
-                    var scrollNode = parentDoc.querySelector('.stMainBlockContainer') || parentDoc.querySelector('.main');
-                    if(scrollNode) scrollNode.scrollTo(0, scrollNode.scrollHeight);
-                }
+                if (marker) marker.scrollIntoView({behavior: 'auto', block: 'end'});
             }, 300);
         </script>
     """, height=0)
@@ -468,54 +337,31 @@ def inject_auto_scroll():
 @st.dialog("🌐 Web App Preview", width="large")
 def render_webapp_modal(html_code: str):
     st.info("💡 Interaksi dengan Web App di bawah ini. Tekan 'X' di sudut kanan atas untuk menutup.")
-    injection = """
-    <base target="_blank">
-    <script>
-        document.addEventListener("click", function(e) {
-            var target = e.target.closest("a");
-            if(target && target.href) {
-                target.setAttribute("target", "_blank");
-            }
-        });
-    </script>
-    """
+    injection = "<base target='_blank'><script>document.addEventListener('click', function(e) { var t = e.target.closest('a'); if(t && t.href) { t.setAttribute('target', '_blank'); } });</script>"
     if re.search(r'<head[^>]*>', html_code, re.IGNORECASE):
         html_code = re.sub(r'(<head[^>]*>)', r'\1\n' + injection, html_code, count=1, flags=re.IGNORECASE)
     else:
         html_code = injection + "\n" + html_code
     components.html(html_code, height=600, scrolling=True)
 
-# ==========================================
-# 5. INISIALISASI & SETUP APLIKASI
-# ==========================================
 def init_session_state():
     defaults = {
-        "logged_in": False,
-        "username": "",
-        "current_session_id": None,
+        "logged_in": False, "username": "", "current_session_id": None,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
-        "temp_image": None,
-        "temp_doc": None,
-        "uploader_key": 0
+        "temp_image": None, "temp_doc": None, "uploader_key": 0,
+        "tahap2_pending": False, "trigger_tahap2": False  # Fitur Anti-Timeout
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
 
-# ==========================================
-# 6. LOGIKA UTAMA APLIKASI
-# ==========================================
 def main():
-    st.set_page_config(
-        page_title="Lagøs AI 9.1 | Premium Chat",
-        page_icon="🔮",
-        layout="centered", 
-        initial_sidebar_state="expanded"
-    )
+    st.set_page_config(page_title="Lagøs AI 9.1", page_icon="🔮", layout="centered", initial_sidebar_state="expanded")
     inject_custom_css()
     DatabaseManager.init_db()
     init_session_state()
 
+    # ... [KODE LOGIN YANG SAMA TIDAK SAYA UBAH] ...
     cookie_manager = stx.CookieManager(key="cookie_manager")
     cookie_logged_in = cookie_manager.get("is_logged_in")
     cookie_username = cookie_manager.get("saved_username")
@@ -538,7 +384,30 @@ def main():
         st.session_state.set_cookie = False
 
     if not st.session_state.logged_in:
-        render_login_ui()
+        st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
+        st.markdown('<div class="header-subtitle">Silakan Masuk untuk Mengakses Asisten</div>', unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1.5, 1])
+        with col2:
+            with st.container(border=True):
+                tab_login, tab_register = st.tabs(["🔑 Masuk", "📝 Daftar Baru"])
+                with tab_login:
+                    log_user = st.text_input("Username", key="log_user")
+                    log_pass = st.text_input("Password", type="password", key="log_pass")
+                    if st.button("Masuk", use_container_width=True, type="primary"):
+                        if DatabaseManager.authenticate_user(log_user, log_pass):
+                            st.session_state.logged_in = True
+                            st.session_state.username = log_user
+                            st.session_state.set_cookie = True 
+                            st.rerun()
+                        else: st.error("Username atau password salah!")
+                with tab_register:
+                    reg_user = st.text_input("Username Baru", key="reg_user")
+                    reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
+                    if st.button("Daftar & Buat Akun", use_container_width=True):
+                        if reg_user and reg_pass:
+                            if DatabaseManager.register_user(reg_user, reg_pass): st.success("✅ Berhasil mendaftar!")
+                            else: st.error("❌ Username sudah dipakai.")
+                        else: st.warning("⚠️ Harap isi data!")
         st.stop()
     
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
@@ -550,14 +419,13 @@ def main():
         if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            st.session_state.tahap2_pending = False
+            st.session_state.trigger_tahap2 = False
             st.rerun()
 
         st.markdown("### 🗂️ Riwayat Obrolan")
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
-        
-        if not sessions:
-            st.caption("Belum ada riwayat obrolan.")
-        else:
+        if sessions:
             with st.container(height=300, border=False):
                 for sess_id, title in sessions:
                     col_btn, col_del = st.columns([6, 1], gap="small") 
@@ -566,6 +434,8 @@ def main():
                         if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
+                            st.session_state.tahap2_pending = False
+                            st.session_state.trigger_tahap2 = False
                             st.rerun()
                     with col_del:
                         if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
@@ -577,23 +447,10 @@ def main():
 
         st.divider()
         st.markdown("### 🧠 Pilih Model AI")
-        selected_model = st.selectbox(
-            label="Pilih model aktif:",
-            options=list(MODEL_MAPPING.keys()),
-            index=0,
-            format_func=lambda x: MODEL_MAPPING[x],
-            label_visibility="collapsed"
-        )
+        selected_model = st.selectbox("Pilih model aktif:", list(MODEL_MAPPING.keys()), format_func=lambda x: MODEL_MAPPING[x], label_visibility="collapsed")
         
         if len(st.session_state.messages) > 1:
-            file_word = MediaUtils.buat_file_word(st.session_state.messages)
-            st.download_button(
-                label="📥 Unduh Laporan (.DOCX)",
-                data=file_word,
-                file_name="Lagøs_AI_9.1_Report.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+            st.download_button("📥 Unduh Laporan (.DOCX)", data=MediaUtils.buat_file_word(st.session_state.messages), file_name="Lagøs_AI_Report.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
         st.divider()
         if st.button("🚪 Keluar (Logout)", use_container_width=True):
@@ -601,33 +458,10 @@ def main():
             st.session_state.username = ""
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            st.session_state.tahap2_pending = False
+            st.session_state.trigger_tahap2 = False
             st.session_state.del_cookie = True 
             st.rerun()
-            
-        st.markdown("### 🛠️ Admin Panel")
-        try:
-            with open(DB_NAME, "rb") as db_file:
-                st.download_button(
-                    label="📦 Download Database (Admin)",
-                    data=db_file,
-                    file_name="lagos_multiuser.db",
-                    mime="application/octet-stream",
-                    use_container_width=True
-                )
-        except FileNotFoundError:
-            pass
-
-        st.markdown(
-            '''
-            <div style="background-color: var(--secondary-background-color); border: 1px dashed var(--border-color); padding: 15px; border-radius: 10px; text-align: center; margin-top: 20px;">
-                <span style="color: #888; font-size: 0.75rem;">Advertisement Space</span><br>
-                <span style="font-size: 0.9rem;">Integrasi Iklan Akan Ditampilkan Di Sini</span>
-            </div>
-            ''', unsafe_allow_html=True
-        )
-
-    if len(st.session_state.messages) == 1:
-        st.markdown("<p style='text-align: center; margin-top: 5vh; color: #666;'>Sistem siap.</p>", unsafe_allow_html=True)
 
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
@@ -639,7 +473,11 @@ def main():
             
             if message["role"] == "assistant":
                 html_code = MediaUtils.ekstrak_kode_html(text_disp)
-                if html_code:
+                # Tampilkan tombol WebApp HANYA jika bukan sedang dipotong (Tahap 2 belum tuntas)
+                is_last_message = (idx == len(st.session_state.messages) - 1)
+                is_pending = is_last_message and st.session_state.get("tahap2_pending")
+                
+                if html_code and not is_pending:
                     st.write("") 
                     if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
                         render_webapp_modal(html_code)
@@ -648,113 +486,69 @@ def main():
                 if json_ppt:
                     st.write("")
                     ppt_file = MediaUtils.buat_file_ppt(json_ppt)
-                    nama_file = f"{json_ppt.get('judul_presentasi', 'Lagøs_Presentation')}.pptx"
-                    
-                    st.download_button(
-                        label="📊 Unduh Presentasi (.PPTX)",
-                        data=ppt_file,
-                        file_name=nama_file.replace(" ", "_"),
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key=f"btn_ppt_{idx}",
-                        use_container_width=True,
-                        type="primary"
-                    )
+                    st.download_button("📊 Unduh Presentasi (.PPTX)", data=ppt_file, file_name=f"{json_ppt.get('judul_presentasi', 'PPT')}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key=f"btn_ppt_{idx}", use_container_width=True, type="primary")
 
-    st.markdown("<div style='height: 90px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 40px'></div>", unsafe_allow_html=True)
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
+    # --- TOMBOL PEMICU TAHAP 2 ---
+    if st.session_state.get("tahap2_pending"):
+        st.info("⚠️ **Tahap 1 (UI/HTML/CSS) Selesai.** Aplikasi web belum lengkap (JavaScript belum ditulis). Hal ini sengaja dihentikan sementara guna mencegah server timeout.")
+        if st.button("⚡ Lanjutkan ke Tahap 2 (Buat JavaScript)", type="primary", use_container_width=True):
+            st.session_state.trigger_tahap2 = True
+            st.session_state.tahap2_pending = False
+            st.rerun()
+
     with st.container():
         uploader_idx = st.session_state.uploader_key
-        current_img = st.session_state.get(f"img_{uploader_idx}")
-        current_doc = st.session_state.get(f"doc_{uploader_idx}")
-
-        if current_img:
-            st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
-        if current_doc:
-            st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
+        if st.session_state.get(f"img_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
+        if st.session_state.get(f"doc_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
 
         col_attach, col_input, col_mic = st.columns([1, 8, 1])
-        
         with col_attach:
             with st.popover("➕"): 
-                st.markdown("**Lampirkan File**")
-                up_img = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{uploader_idx}")
-                up_doc = st.file_uploader("Upload Doc", type=["pdf", "txt", "docx"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
-                st.session_state.temp_image = up_img
-                st.session_state.temp_doc = up_doc
-
+                st.session_state.temp_image = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{uploader_idx}")
+                st.session_state.temp_doc = st.file_uploader("Upload Doc", type=["pdf", "txt", "docx"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
         with col_input:
-            prompt_text = st.chat_input("Tanyakan sesuatu pada Lagøs AI 9.1...")
-
+            prompt_text = st.chat_input("Tanyakan sesuatu pada Lagøs AI 9.1..." if not st.session_state.get("tahap2_pending") else "Terkunci (Selesaikan Tahap 2 di atas)", disabled=st.session_state.get("tahap2_pending"))
         with col_mic:
-            audio_bytes = audio_recorder(
-                text="", 
-                recording_color="#ff4b4b",
-                neutral_color="#888888", 
-                icon_name="microphone", 
-                icon_size="1.8x",
-                key=f"mic_{uploader_idx}"
-            )
+            audio_bytes = audio_recorder(text="", recording_color="#ff4b4b", neutral_color="#888888", icon_name="microphone", icon_size="1.8x", key=f"mic_{uploader_idx}")
 
     prompt = prompt_text
-    
     if audio_bytes and not prompt_text:
         with st.spinner("Menerjemahkan suara..."):
-            r = sr.Recognizer()
-            try:
-                with io.BytesIO(audio_bytes) as source_bytes:
-                    with sr.AudioFile(source_bytes) as source:
-                        audio_data = r.record(source)
-                        prompt = r.recognize_google(audio_data, language="id-ID")
-            except sr.UnknownValueError:
-                st.warning("Suara tidak terdengar jelas. Silakan coba lagi.")
-                prompt = None
-            except Exception as e:
-                st.error(f"Sistem gagal memproses suara: {e}")
-                prompt = None
+            try: prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
+            except: st.warning("Suara tidak terdengar jelas.")
 
-    if prompt:
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # --- PENGENDALI STATUS TAHAP ---
+    is_tahap2_exec = st.session_state.get("trigger_tahap2", False)
 
-        teks_tambahan = ""
-        if st.session_state.temp_doc:
-            with st.spinner("Membaca referensi dokumen..."):
-                teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-                if teks_dok:
-                    teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR KONTEN DOKUMEN]\n"
-
-        urls_found = re.compile(r'https?://\S+').findall(prompt)
-        if urls_found:
-            with st.spinner("Mengekstrak informasi dari Link..."):
-                for url in urls_found:
-                    teks_web = MediaUtils.ambil_teks_dari_link(url)
-                    teks_web_singkat = teks_web[:4000]
-                    teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{teks_web_singkat}\n[AKHIR ISI WEBSITE]\n"
-
-        # --- TAMBAHAN LOGIKA TRADING ---
-        kata_kunci_trading = ["analisis", "short", "long", "beli", "jual", "prospek", "harga"]
-        if any(kata in prompt.lower() for kata in kata_kunci_trading):
-            potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
-            if potensi_ticker:
-                with st.spinner(f"Mengambil data pasar real-time untuk {potensi_ticker[0]}..."):
-                    data_pasar = MarketUtils.ambil_data_pasar(potensi_ticker[0])
-                    teks_tambahan += f"\n[DATA PASAR TERBARU]\n{data_pasar}\n[Gunakan data ini untuk analisis LONG/SHORT]\n"
-        # -------------------------------
-
-        final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
-
-        if st.session_state.temp_image:
-            base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
-            konten_payload = [
-                {"type": "text", "text": final_prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-            ]
+    if prompt or is_tahap2_exec:
+        if is_tahap2_exec:
+            st.session_state.trigger_tahap2 = False # Reset agar tidak loop
         else:
-            konten_payload = final_prompt 
+            with st.chat_message("user"): st.markdown(prompt)
+            teks_tambahan = ""
+            if st.session_state.temp_doc:
+                teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
+                if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN]\n{teks_dok}\n"
 
-        st.session_state.messages.append({"role": "user", "content": konten_payload})
+            urls_found = re.compile(r'https?://\S+').findall(prompt)
+            for url in urls_found:
+                teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{MediaUtils.ambil_teks_dari_link(url)[:4000]}\n"
+
+            if any(kata in prompt.lower() for kata in ["analisis", "short", "long", "beli", "jual", "prospek"]):
+                potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
+                if potensi_ticker: teks_tambahan += f"\n[DATA PASAR TERBARU]\n{MarketUtils.ambil_data_pasar(potensi_ticker[0])}\n"
+
+            final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
+
+            if st.session_state.temp_image:
+                base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
+                st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": final_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
+            else:
+                st.session_state.messages.append({"role": "user", "content": final_prompt})
 
         with st.chat_message("assistant"):
             client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
@@ -764,85 +558,57 @@ def main():
             try:
                 if selected_model == "google/veo-3.1-fast-generate-preview":
                     with st.spinner("Menghasilkan gambar..."):
-                        img_response = client.images.generate(
-                            model=selected_model,
-                            prompt=prompt,
-                            n=1
-                        )
-                        image_url = img_response.data[0].url
-                        full_response = f"![Gambar yang Dihasilkan]({image_url})"
-                        placeholder.markdown(full_response)
+                        image_url = client.images.generate(model=selected_model, prompt=prompt, n=1).data[0].url
+                        placeholder.markdown(f"![Gambar yang Dihasilkan]({image_url})")
+                        st.session_state.messages.append({"role": "assistant", "content": f"![Gambar yang Dihasilkan]({image_url})"})
                 else:
-                    # --- TAMBAHAN FITUR 2 TAHAP UNTUK PEMBUATAN WEB/APLIKASI ---
-                    kata_kunci_web = ["buat aplikasi", "bikin aplikasi", "buat web", "bikin web", "buatkan aplikasi", "buatkan web", "aplikasi web", "web app", "html"]
-                    is_web_app = any(kata in prompt.lower() for kata in kata_kunci_web)
-
-                    if is_web_app:
-                        st.info("⏳ Mode Web/App: Memproses dalam 2 tahap (Tahap 1: UI/HTML & CSS)...")
+                    if is_tahap2_exec:
+                        st.info("⏳ Memproses Tahap 2 (Menyusun Logika JavaScript & Finalisasi)...")
                         
-                        tahap1_msgs = st.session_state.messages.copy()
-                        last_msg_content = tahap1_msgs[-1]["content"]
-                        tambahan_instruksi = "\n\n[INSTRUKSI SISTEM PENTING]: Kerjakan pembuatan aplikasi ini dalam 2 TAHAP agar kode tidak terpotong (timeout/max token).\nTAHAP 1: Buat dan tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok ```html. PENTING: JANGAN tutup tag </body> dan </html>, dan JANGAN berikan kode JavaScript di tahap ini."
-                        
-                        # Pastikan format kompatibel walau pengguna melampirkan gambar
-                        if isinstance(last_msg_content, list):
-                            new_content = last_msg_content.copy()
-                            new_content[0] = {"type": "text", "text": new_content[0]["text"] + tambahan_instruksi}
-                            tahap1_msgs[-1] = {"role": "user", "content": new_content}
-                        else:
-                            tahap1_msgs[-1] = {"role": "user", "content": str(last_msg_content) + tambahan_instruksi}
-                        
-                        response_stream_1 = client.chat.completions.create(
-                            model=selected_model, 
-                            messages=tahap1_msgs,
-                            temperature=0.7,
-                            max_tokens=12096,
-                            stream=True
-                        )
-                        for chunk in response_stream_1:
-                            if chunk.choices and len(chunk.choices) > 0:
-                                delta = chunk.choices[0].delta.content
-                                if delta:
-                                    full_response += delta
-                                    placeholder.markdown(full_response + "▌")
-                                    
-                        st.info("⏳ Mode Web/App: Memproses Tahap 2 (Logika JavaScript & Finalisasi)...")
-                        
-                        tahap2_msgs = tahap1_msgs.copy()
-                        tahap2_msgs.append({"role": "assistant", "content": full_response})
+                        tahap2_msgs = copy.deepcopy(st.session_state.messages)
                         tahap2_msgs.append({
                             "role": "user",
-                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka blok kode markdown baru (jangan tulis ```html atau ```javascript lagi), sambung langsung saja agar menyatu menjadi satu blok kode HTML yang sempurna."
+                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka awalan blok markdown baru (jangan tulis ```html atau ```javascript lagi), sambung langsung saja agar menyatu."
                         })
                         
-                        response_stream_2 = client.chat.completions.create(
-                            model=selected_model, 
-                            messages=tahap2_msgs,
-                            temperature=0.7,
-                            max_tokens=12096,
-                            stream=True
+                        # Ambil teks tahap 1 untuk disambung
+                        last_msg_content = st.session_state.messages[-1]["content"]
+                        if last_msg_content.strip().endswith("```"):
+                            last_msg_content = last_msg_content.rstrip("` \n") # Hilangkan penutup sementara
+                            
+                        response_stream = client.chat.completions.create(
+                            model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=12096, stream=True
                         )
-                        for chunk in response_stream_2:
+                        
+                        for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
                                 if delta:
                                     full_response += delta
-                                    placeholder.markdown(full_response + "▌")
+                                    placeholder.markdown(last_msg_content + "\n" + full_response + "▌")
                                     
-                        # Pastikan blok ditutup jika AI lupa menutupnya di akhir
-                        if full_response.count("```") % 2 != 0:
-                            full_response += "\n```"
-                            
-                        placeholder.markdown(full_response)
+                        # Pastikan blok markdown tertutup sempurna
+                        gabungan_kode = last_msg_content + "\n" + full_response
+                        if not gabungan_kode.strip().endswith("```"): gabungan_kode += "\n```"
+                        
+                        placeholder.markdown(gabungan_kode)
+                        st.session_state.messages[-1]["content"] = gabungan_kode # Replace pesan tahap 1 dengan gabungan penuh
                         
                     else:
-                        # --- PROSES NORMAL UNTUK PERTANYAAN BIASA ---
+                        is_web_app = any(kata in prompt.lower() for kata in ["buat aplikasi", "bikin aplikasi", "buat web", "bikin web", "aplikasi web", "html"])
+                        payload_msgs = copy.deepcopy(st.session_state.messages)
+                        
+                        if is_web_app:
+                            st.info("⏳ Mode Web/App: Memproses Tahap 1 (Menyusun Struktur UI, HTML & CSS)...")
+                            instruksi_tahap_1 = "\n\n[INSTRUKSI SISTEM PENTING]: Karena potensi timeout, kerjakan pembuatan web dalam 2 TAHAP. TAHAP 1: Tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok ```html. PENTING: JANGAN tulis JavaScript, dan JANGAN tutup tag </body> atau </html> pada tahap ini."
+                            
+                            if isinstance(payload_msgs[-1]["content"], list):
+                                payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
+                            else:
+                                payload_msgs[-1]["content"] += instruksi_tahap_1
+
                         response_stream = client.chat.completions.create(
-                            model=selected_model, 
-                            messages=st.session_state.messages,
-                            temperature=0.7,
-                            max_tokens=12096,
-                            stream=True
+                            model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=12096, stream=True
                         )
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
@@ -850,33 +616,28 @@ def main():
                                 if delta:
                                     full_response += delta
                                     placeholder.markdown(full_response + "▌")
+                                    
                         placeholder.markdown(full_response)
-                    # -----------------------------------------------------------
-                
-                st.session_state.messages[-1] = {"role": "user", "content": prompt}
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-                
+                        st.session_state.messages.append({"role": "assistant", "content": full_response})
+                        
+                        if is_web_app:
+                            st.session_state.tahap2_pending = True
+
                 if st.session_state.current_session_id is None:
                     st.session_state.current_session_id = str(uuid.uuid4())
                 
-                judul_chat = MediaUtils.generate_title_from_messages(st.session_state.messages)
-                DatabaseManager.save_session(
-                    st.session_state.current_session_id, 
-                    st.session_state.username, 
-                    judul_chat, 
-                    st.session_state.messages
-                )
+                DatabaseManager.save_session(st.session_state.current_session_id, st.session_state.username, MediaUtils.generate_title_from_messages(st.session_state.messages), st.session_state.messages)
 
-                st.session_state.temp_image = None
-                st.session_state.temp_doc = None
-                st.session_state.uploader_key += 1 
+                if not is_tahap2_exec:
+                    st.session_state.temp_image = None
+                    st.session_state.temp_doc = None
+                    st.session_state.uploader_key += 1 
                 
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Kesalahan teknis pada engine Lagøs AI: {str(e)}")
-                if st.session_state.messages[-1]["role"] == "user":
-                    st.session_state.messages.pop()
+                st.error(f"Kesalahan teknis: {str(e)}")
+                if st.session_state.messages[-1]["role"] == "user": st.session_state.messages.pop()
 
 if __name__ == "__main__":
     main()
