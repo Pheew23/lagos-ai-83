@@ -28,7 +28,7 @@ from audio_recorder_streamlit import audio_recorder
 # ==========================================
 DB_NAME = 'lagos_multiuser.db'
 API_KEY = st.secrets["NVIDIA_API_KEY"]
-BASE_URL = "https://integrate.api.nvidia.com/v1"
+BASE_URL = "[https://integrate.api.nvidia.com/v1](https://integrate.api.nvidia.com/v1)"
 
 # Trik untuk menghindari bug render markdown di antarmuka web
 B3 = "`" * 3
@@ -374,7 +374,7 @@ class MarketUtils:
 def inject_custom_css():
     st.markdown("""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+            @import url('[https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap)');
             html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
             #MainMenu {visibility: hidden;} footer {visibility: hidden;}
             .header-title { text-align: center; font-size: 2.2rem; font-weight: 700; background: linear-gradient(90deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0px; padding-top: 10px; }
@@ -520,6 +520,7 @@ def main():
             st.session_state.del_cookie = True 
             st.rerun()
 
+    # RENDER OBROLAN
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
         with st.chat_message(message["role"]):
@@ -566,7 +567,7 @@ def main():
     inject_auto_scroll()
 
     if st.session_state.get("tahap2_pending"):
-        st.info("⚠️ **Tahap 1 Selesai.** Aplikasi belum lengkap. Lanjutkan untuk mencegah timeout.")
+        st.info("⚠️ **Tahap 1 (UI/CSS) Selesai.** Aplikasi belum lengkap. Lanjutkan untuk merender logika JavaScript dan mencegah timeout server.")
         if st.button("⚡ Lanjutkan ke Tahap 2", type="primary", use_container_width=True):
             st.session_state.trigger_tahap2 = True
             st.session_state.tahap2_pending = False
@@ -644,31 +645,56 @@ def main():
                         st.session_state.messages.append({"role": "assistant", "content": f"![Gambar yang Dihasilkan]({image_url})"})
                 else:
                     if is_tahap2_exec:
-                        st.info("⏳ Memproses Tahap 2 (Finalisasi JavaScript)...")
+                        st.info("⏳ Memproses Tahap 2 (Menggabungkan JavaScript)...")
                         tahap2_msgs = copy.deepcopy(st.session_state.messages)
                         tahap2_msgs.append({
                             "role": "user",
-                            "content": "TAHAP 2: Lanjutkan kode sebelumnya. Tuliskan HANYA sisa kode JavaScript-nya (di dalam tag <script>) dan tutup semua sisa tag HTML/BODY-nya. \nPENTING: JANGAN ulangi kode awal dan JANGAN membuka awalan blok markdown baru, sambung langsung saja agar menyatu."
+                            "content": "TAHAP 2: Lanjutkan pembuatan aplikasi. Berikan HANYA kode JavaScript-nya saja. Jangan ulangi HTML/CSS dari Tahap 1."
                         })
                         
-                        last_msg_content = st.session_state.messages[-1]["content"]
-                        if last_msg_content.strip().endswith(B3):
-                            last_msg_content = last_msg_content.rstrip("` \n") 
-                            
-                        # max_tokens diturunkan ke 4000 untuk mencegah error 404 dari proxy NVIDIA
-                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True)
+                        response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=8000, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
                                 delta = chunk.choices[0].delta.content
                                 if delta:
                                     full_response += delta
-                                    placeholder.markdown(last_msg_content + "\n" + full_response + "▌")
+                                    placeholder.markdown("⏳ **Menyusun Tahap 2 (JavaScript)...**\n\n" + full_response + "▌")
                                     
-                        gabungan_kode = last_msg_content + "\n" + full_response
-                        if not gabungan_kode.strip().endswith(B3): gabungan_kode += "\n" + B3
+                        # ====================================================
+                        # LOGIKA PENGGABUNGAN KODE YANG SUDAH DIPERBAIKI
+                        # ====================================================
+                        # 1. Bersihkan kode Tahap 2 (Hanya ambil isi JS-nya)
+                        teks_tahap2 = full_response
+                        if teks_tahap2.count(B3) % 2 != 0: teks_tahap2 += f"\n{B3}"
                         
-                        placeholder.markdown(gabungan_kode)
-                        st.session_state.messages[-1]["content"] = gabungan_kode 
+                        blok_kode2 = re.findall(r'`{3}[a-zA-Z]*\n(.*?)\n`{3}', teks_tahap2, re.DOTALL | re.IGNORECASE)
+                        kode_tahap2 = "\n".join(blok_kode2) if blok_kode2 else teks_tahap2.replace(B3, '')
+                        kode_tahap2 = kode_tahap2.strip()
+                        
+                        # Pastikan terbungkus tag script jika belum ada
+                        if kode_tahap2 and "<script" not in kode_tahap2.lower():
+                            kode_tahap2 = f"<script>\n{kode_tahap2}\n</script>"
+
+                        # 2. Ambil isi bersih HTML dari Tahap 1
+                        last_msg_content = st.session_state.messages[-1]["content"]
+                        teks_tahap1 = last_msg_content
+                        if teks_tahap1.count(B3) % 2 != 0: teks_tahap1 += f"\n{B3}"
+                            
+                        blok_kode1 = re.findall(r'`{3}html\n(.*?)\n`{3}', teks_tahap1, re.DOTALL | re.IGNORECASE)
+                        kode_tahap1 = blok_kode1[0] if blok_kode1 else teks_tahap1.replace('```html', '').replace('```', '')
+                        kode_tahap1 = kode_tahap1.strip()
+                        
+                        # 3. Suntikkan JS Tahap 2 ke dalam HTML Tahap 1
+                        if "</body>" in kode_tahap1.lower():
+                            gabungan_bersih = re.sub(r'</body>', f'{kode_tahap2}\n</body>', kode_tahap1, flags=re.IGNORECASE)
+                        else:
+                            gabungan_bersih = kode_tahap1 + "\n" + kode_tahap2
+                            
+                        # 4. Buat SATU blok Markdown utuh dan timpa riwayat pesan
+                        hasil_final = f"Berikut adalah aplikasi web lengkapnya:\n\n{B3}html\n{gabungan_bersih}\n{B3}"
+                        
+                        st.session_state.messages[-1]["content"] = hasil_final 
+                        placeholder.markdown(hasil_final)
                         
                     else:
                         is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
@@ -676,11 +702,10 @@ def main():
                         
                         if is_web_app:
                             st.info("⏳ Mode Web/App (Saklar ON): Memproses Tahap 1...")
-                            instruksi_tahap_1 = "\n\n[PENTING]: Kerjakan dalam 2 TAHAP. TAHAP 1: Buat kerangka HTML & CSS saja di dalam blok " + B3 + "html. JANGAN tulis JavaScript dan JANGAN tutup tag HTML/BODY pada tahap ini."
+                            instruksi_tahap_1 = "\n\n[PENTING]: Kerjakan dalam 2 TAHAP. TAHAP 1: Buat struktur HTML & CSS saja (bisa tambahkan framework seperti Tailwind/Bootstrap). Tuliskan di dalam SATU blok " + B3 + "html. JANGAN tulis logika JavaScript."
                             if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
                             else: payload_msgs[-1]["content"] += instruksi_tahap_1
 
-                        # max_tokens diturunkan ke 4000 untuk mencegah error 404 dari proxy NVIDIA
                         response_stream = client.chat.completions.create(model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True)
                         for chunk in response_stream:
                             if chunk.choices and len(chunk.choices) > 0:
