@@ -28,7 +28,7 @@ from audio_recorder_streamlit import audio_recorder
 # ==========================================
 DB_NAME = 'lagos_multiuser.db'
 API_KEY = st.secrets["NVIDIA_API_KEY"]
-BASE_URL = "[https://integrate.api.nvidia.com/v1](https://integrate.api.nvidia.com/v1)"
+BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 # Trik untuk menghindari bug render markdown di antarmuka web
 B3 = "`" * 3
@@ -374,7 +374,7 @@ class MarketUtils:
 def inject_custom_css():
     st.markdown("""
         <style>
-            @import url('[https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap)');
+            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
             html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
             #MainMenu {visibility: hidden;} footer {visibility: hidden;}
             .header-title { text-align: center; font-size: 2.2rem; font-weight: 700; background: linear-gradient(90deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0px; padding-top: 10px; }
@@ -681,14 +681,14 @@ def main():
                         if teks_tahap1.count(B3) % 2 != 0: teks_tahap1 += f"\n{B3}"
                             
                         blok_kode1 = re.findall(r'`{3}html\n(.*?)\n`{3}', teks_tahap1, re.DOTALL | re.IGNORECASE)
-                        kode_tahap1 = blok_kode1[0] if blok_kode1 else teks_tahap1.replace('```html', '').replace('```', '')
+                        kode_tahap1 = blok_kode1[0] if blok_kode1 else teks_tahap1.replace(f'{B3}html', '').replace(B3, '')
                         kode_tahap1 = kode_tahap1.strip()
                         
-                        # 3. Suntikkan JS Tahap 2 ke dalam HTML Tahap 1
-                        if "</body>" in kode_tahap1.lower():
-                            gabungan_bersih = re.sub(r'</body>', f'{kode_tahap2}\n</body>', kode_tahap1, flags=re.IGNORECASE)
+                        # 3. Suntikkan JS Tahap 2 ke dalam HTML Tahap 1 menggunakan lambda yang aman 100%
+                        if re.search(r'</body>', kode_tahap1, re.IGNORECASE):
+                            gabungan_bersih = re.sub(r'</body>', lambda _: f'\n{kode_tahap2}\n</body>', kode_tahap1, flags=re.IGNORECASE)
                         else:
-                            gabungan_bersih = kode_tahap1 + "\n" + kode_tahap2
+                            gabungan_bersih = kode_tahap1 + "\n\n" + kode_tahap2
                             
                         # 4. Buat SATU blok Markdown utuh dan timpa riwayat pesan
                         hasil_final = f"Berikut adalah aplikasi web lengkapnya:\n\n{B3}html\n{gabungan_bersih}\n{B3}"
