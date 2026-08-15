@@ -61,10 +61,8 @@ Jika pengguna bertanya tentang prospek pasar, koin, saham, atau kapan harus LONG
 4. Berikan rekomendasi tegas: "🟢 SINYAL LONG", "🔴 SINYAL SHORT", atau "🟡 HOLD (Tunggu/Jangan Masuk)".
 5. WAJIB sertakan estimasi level Take Profit (TP) dan Stop Loss (SL) yang logis.
 
-ATURAN KETAT PEMBUATAN APLIKASI WEB (HTML):
-1. JANGAN PERNAH membuat atau menulis kode aplikasi/web KECUALI pengguna secara EKSPLISIT dan JELAS memerintahkan Anda untuk membuatnya (contoh perintah: "buatkan saya aplikasi...", "tulis kode web...", "bikin web app...").
-2. Jika pengguna hanya bertanya teori, berdiskusi, atau sekadar menyebut kata "aplikasi" TANPA menyuruh membuatnya, berikan penjelasan teks biasa TANPA menulis kode HTML.
-3. Jika pengguna BENAR-BENAR memerintahkan pembuatan aplikasi, Anda HARUS menuliskan kodenya di dalam SATU file HTML lengkap (gabungkan CSS dan JS di dalamnya) dan bungkus dengan blok kode html.
+ATURAN PEMBUATAN APLIKASI WEB (HTML):
+Perhatikan baik-baik [STATUS SAKLAR] yang dikirimkan bersama pertanyaan. Jika pengguna menyalakan saklar (ON), Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika saklar MATI (OFF), Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
 Jika pengguna meminta Anda untuk membuat dokumen, artikel, surat, makalah, atau laporan dalam bentuk Word, DOCX, atau PDF, Anda HARUS merangkum isi kontennya dan menaruhnya MURNI di dalam blok kode `document`.
@@ -477,6 +475,9 @@ def main():
 
     with st.sidebar:
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
+        
+        st.divider()
+        
         if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -592,7 +593,12 @@ def main():
             st.session_state.tahap2_pending = False
             st.rerun()
 
+    # ==========================================
+    # POSISI BARU SAKLAR (Tepat di atas kolom chat)
+    # ==========================================
     with st.container():
+        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan jika Anda secara eksplisit meminta AI membuat web (HTML). Jika mati, AI hanya akan membalas dengan obrolan biasa.")
+        
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
         if st.session_state.get(f"doc_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
@@ -621,6 +627,13 @@ def main():
         else:
             with st.chat_message("user"): st.markdown(prompt)
             teks_tambahan = ""
+            
+            # INJEKSI LOGIKA SAKLAR APLIKASI
+            if app_mode:
+                teks_tambahan += "\n[STATUS SAKLAR: ON (MODE APLIKASI). Anda DIIZINKAN merender kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
+            else:
+                teks_tambahan += "\n[STATUS SAKLAR: OFF (MODE NORMAL). Anda DILARANG KERAS membuat atau menulis kode aplikasi web/HTML. Jawablah menggunakan teks biasa saja meskipun pengguna meminta dibuatkan aplikasi.]\n"
+            
             if st.session_state.temp_doc:
                 teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
                 if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN]\n{teks_dok}\n"
@@ -680,11 +693,12 @@ def main():
                         st.session_state.messages[-1]["content"] = gabungan_kode 
                         
                     else:
-                        is_web_app = any(kata in prompt.lower() for kata in ["buat aplikasi", "bikin aplikasi", "buat web", "bikin web", "aplikasi web", "html"])
+                        # PROSES TAHAP 1 (Hanya dieksekusi jika SAKLAR ON dan ada kata kunci aplikasi)
+                        is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
                         payload_msgs = copy.deepcopy(st.session_state.messages)
                         
                         if is_web_app:
-                            st.info("⏳ Mode Web/App: Memproses Tahap 1...")
+                            st.info("⏳ Mode Web/App (Saklar ON): Memproses Tahap 1...")
                             instruksi_tahap_1 = "\n\n[INSTRUKSI SISTEM PENTING]: Karena potensi timeout, kerjakan pembuatan web dalam 2 TAHAP. TAHAP 1: Tuliskan kerangka dasar HTML dan CSS-nya saja, bungkus dalam SATU blok " + B3 + "html. PENTING: JANGAN tulis JavaScript, dan JANGAN tutup tag </body> atau </html> pada tahap ini."
                             if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
                             else: payload_msgs[-1]["content"] += instruksi_tahap_1
