@@ -8,10 +8,16 @@ import sqlite3
 import hashlib
 import datetime
 import copy
+import time  # <-- Tambahan library untuk memberi jeda/napas pada Agent
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
 import requests
+import yfinance as yf
+from bs4 import BeautifulSoup
+from docx import Document
+from pptx import Presentation
+import speech_recognition as sr
 import streamlit as st
 import streamlit.components.v1 as components
 import extra_streamlit_components as stx
@@ -398,6 +404,10 @@ class MediaUtils:
     def ambil_teks_dari_link(url: str) -> str:
         try:
             from bs4 import BeautifulSoup # Lazy loading
+            # Jika tidak ada http/https, tambahkan otomatis
+            if not url.startswith('http'):
+                url = 'https://' + url
+                
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -620,7 +630,7 @@ def init_session_state():
 def main():
     st.set_page_config(page_title="Lagøs AI Agent", page_icon="🤖", layout="centered", initial_sidebar_state="expanded")
     inject_custom_css()
-    setup_database() # Panggil koneksi DB yang sudah di-cache
+    setup_database() 
     init_session_state()
 
     cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -825,6 +835,15 @@ def main():
                 teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
                 if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
 
+            # Ambil URL tambahan jika ada (Fallback manual)
+            urls_found = re.compile(r'https?://\S+').findall(prompt)
+            # Jika user tidak memasukkan 'http', tapi format web umum (seperti sekolah.sch.id), tangkap juga
+            urls_tambahan = re.compile(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s]*)?\b').findall(prompt)
+            semua_url = list(set(urls_found + urls_tambahan))
+            
+            for url in semua_url:
+                teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)[:4000]}\n"
+
             final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
             if st.session_state.temp_image:
@@ -906,6 +925,10 @@ def main():
                                 "name": func_name,
                                 "content": str(hasil_fungsi),
                             })
+                            
+                        # Mencegah Rate Limit 429 dari NVIDIA (Menambahkan JEDA)
+                        time.sleep(2.5) 
+                        
                 except Exception as e:
                     pass
 
@@ -999,7 +1022,9 @@ def main():
 
             except Exception as e:
                 error_msg = str(e)
-                if "404" in error_msg:
+                if "429" in error_msg:
+                    st.error("⏳ Error 429 (Too Many Requests): Server API NVIDIA sedang membatasi kecepatan permintaan Anda. Silakan tunggu sekitar 10-20 detik lalu coba lagi. Anda juga bisa mencoba ganti Model AI di menu samping.")
+                elif "404" in error_msg:
                     st.error("❌ Kesalahan 404: Model AI yang Anda pilih sedang tidak tersedia/down di server NVIDIA, atau limit teks terlalu besar.")
                 else:
                     st.error(f"Kesalahan teknis: {error_msg}")
