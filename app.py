@@ -159,12 +159,9 @@ class DatabaseManager:
             
             cleaned_rows = []
             for sess_id, title in rows:
-                # Membersihkan judul-judul kotor yang telanjur tersimpan di database lama
-                if "[MODE" in title or "Pertanyaan/" in title:
-                    title = re.sub(r'\[.*?\]', '', title)
-                    title = title.replace("Pertanyaan/Instruksi Pengguna:", "")
-                    title = title.replace("\n", " ").strip()
-                    if not title: title = "Obrolan Lama"
+                # PEMBERSIHAN EKSTRIM: Langsung deteksi teks kotor dan ganti namanya
+                if "MODE NORMAL" in title or "MODE APLIKASI" in title or "[MODE" in title or "Anda..." in title:
+                    title = "Riwayat Lama"
                 cleaned_rows.append((sess_id, title))
             return cleaned_rows
 
@@ -418,26 +415,32 @@ def inject_custom_css():
                 color: var(--text-color) !important;
                 text-align: left !important;
                 justify-content: flex-start !important;
-                padding: 0.4rem 0.5rem !important;
+                padding: 0.3rem 0.5rem !important;
                 border-radius: 8px !important;
                 width: 100% !important;
                 box-shadow: none !important;
+                min-height: 35px !important;
             }
+            
+            /* TARGETING SEMUA ELEMEN TEKS DI DALAM TOMBOL AGAR SUPER KECIL */
+            [data-testid="stSidebar"] .stButton > button p,
+            [data-testid="stSidebar"] .stButton > button div,
+            [data-testid="stSidebar"] .stButton > button span {
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                margin: 0px !important;
+                line-height: 1.2 !important;
+            }
+            
             [data-testid="stSidebar"] .stButton > button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
             }
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] * {
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
-            }
-            /* MEMAKSA FONT MENGECIL */
-            [data-testid="stSidebar"] .stButton > button * {
-                font-size: 13px !important;
-                margin: 0 !important;
-                padding: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -611,15 +614,6 @@ def main():
             content = message["content"]
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
             
-            # Membersihkan sisa-sisa injeksi rahasia agar tidak terlihat di UI obrolan lama
-            if message["role"] == "user":
-                if "Pertanyaan/Instruksi Pengguna:\n" in text_disp:
-                    text_disp = text_disp.split("Pertanyaan/Instruksi Pengguna:\n")[-1]
-                text_disp = re.sub(r'\[MODE.*?\]', '', text_disp, flags=re.DOTALL)
-                text_disp = re.sub(r'\[ISI WEBSITE.*?\]', '', text_disp, flags=re.DOTALL)
-                text_disp = re.sub(r'\[DATA PASAR.*?\]', '', text_disp, flags=re.DOTALL)
-                text_disp = re.sub(r'\[KONTEN DOKUMEN\]', '', text_disp, flags=re.DOTALL).strip()
-
             st.markdown(text_disp)
             
             if message["role"] == "assistant":
@@ -694,7 +688,7 @@ def main():
         else:
             with st.chat_message("user"): st.markdown(prompt)
             
-            # KINI MEMORI HANYA MENYIMPAN TEKS MURNI, TANPA INSTRUKSI RAHASIA
+            # MEMORI HANYA MENYIMPAN TEKS MURNI
             if st.session_state.temp_image:
                 base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
                 st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
@@ -758,7 +752,7 @@ def main():
                         placeholder.markdown(hasil_final)
                         
                     else:
-                        # MENDUPLIKAT MEMORI HANYA UNTUK DIKIRIM KE API (DI BALIK LAYAR)
+                        # DUPLIKASI MEMORI HANYA UNTUK API (TIDAK TERSIMPAN DI LAYAR)
                         payload_msgs = copy.deepcopy(st.session_state.messages)
                         
                         teks_tambahan = ""
@@ -779,7 +773,7 @@ def main():
                             potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
                             if potensi_ticker: teks_tambahan += f"\n[DATA PASAR TERBARU]\n{MarketUtils.ambil_data_pasar(potensi_ticker[0])}\n"
 
-                        # MENYUNTIKKAN INSTRUKSI RAHASIA KE DALAM PESAN TERAKHIR (HANYA KE API)
+                        # SUNTIKKAN INSTRUKSI RAHASIA (HANYA UNTUK API)
                         if teks_tambahan:
                             last_idx = len(payload_msgs) - 1
                             orig_content = payload_msgs[last_idx]["content"]
