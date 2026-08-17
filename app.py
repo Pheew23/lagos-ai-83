@@ -414,90 +414,82 @@ def inject_custom_css():
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
             /* =========================================
-               CSS SUPER AGRESIF UNTUK SIDEBAR
+               PERBAIKAN CSS FINAL SIDEBAR
                ========================================= */
             
-            /* 1. Reset Semua Tombol Sidebar (Membunuh Kotak) */
-            [data-testid="stSidebar"] button {
+            /* 1. Reset Tombol Sidebar */
+            [data-testid="stSidebar"] .stButton > button,
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button {
                 border: none !important;
                 box-shadow: none !important;
+                background-color: transparent !important;
                 min-height: 35px !important;
             }
             
-            /* 2. RATA KIRI untuk Tombol Riwayat Chat */
+            /* 2. RATA KIRI UNTUK TOMBOL RIWAYAT */
             [data-testid="stSidebar"] .stButton > button {
-                justify-content: flex-start !important;
-                background-color: transparent !important;
                 padding: 0.4rem 0.5rem !important;
                 border-radius: 8px !important;
                 width: 100% !important;
-            }
-            [data-testid="stSidebar"] .stButton > button:hover {
-                background-color: var(--secondary-background-color) !important;
-            }
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-                background-color: rgba(125, 78, 255, 0.15) !important;
+                display: block !important; /* Paksa block agar tidak flex-center */
             }
             
-            /* 3. Paksa Teks Chat Rata Kiri & Font 13px */
-            [data-testid="stSidebar"] .stButton > button div[data-testid="stMarkdownContainer"] {
+            /* Paksa teks di dalam tombol riwayat menjadi rata kiri */
+            [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {
                 width: 100% !important;
-                display: flex !important;
-                justify-content: flex-start !important;
+                display: block !important;
             }
-            [data-testid="stSidebar"] .stButton > button p {
+            [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] p {
                 text-align: left !important;
                 font-size: 13px !important;
                 font-weight: 500 !important;
                 margin: 0 !important;
+            }
+            
+            /* Efek Hover & Aktif */
+            [data-testid="stSidebar"] .stButton > button:hover,
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+                background-color: var(--secondary-background-color) !important;
+            }
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+                background-color: rgba(125, 78, 255, 0.15) !important;
             }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
             }
 
-            /* 4. POPOVER TITIK TIGA (MENGHAPUS PANAH & KOTAK TOTAL) */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
-                background-color: transparent !important;
+            /* 3. MENGHANCURKAN PANAH DI TOMBOL TITIK 3 */
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button {
                 padding: 0 !important;
-                margin: 0 !important;
-                width: 30px !important;
+                width: 32px !important;
                 height: 35px !important;
                 border-radius: 8px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
             }
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-                background-color: var(--secondary-background-color) !important;
-            }
             
-            /* INI YANG AKAN MEMBUNUH PANAH (CHEVRON) SVG SECARA PERMANEN */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button svg {
+            /* Sembunyikan SEMUA elemen di dalam popover button KECUALI teks titik tiganya */
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button > *:not([data-testid="stMarkdownContainer"]) {
                 display: none !important;
                 width: 0 !important;
                 height: 0 !important;
-                visibility: hidden !important;
+                opacity: 0 !important;
             }
             
-            /* Membunuh sisa ruang panah di sebelah titik 3 */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button > div:nth-child(2) {
-                display: none !important;
-            }
-            
-            /* Memastikan teks "⋮" persis di tengah */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button div[data-testid="stMarkdownContainer"] {
-                width: 100% !important;
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-            }
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button p {
+            /* Format teks titik tiga */
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button [data-testid="stMarkdownContainer"] p {
                 text-align: center !important;
-                margin: 0 !important;
                 font-size: 18px !important;
-                line-height: 1 !important;
                 font-weight: bold !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                color: var(--text-color) !important;
+                opacity: 0.7;
+            }
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover [data-testid="stMarkdownContainer"] p {
+                opacity: 1;
             }
         </style>
     """, unsafe_allow_html=True)
