@@ -159,7 +159,6 @@ class DatabaseManager:
             
             cleaned_rows = []
             for sess_id, title in rows:
-                # PEMBERSIHAN EKSTRIM: Langsung deteksi teks kotor dan ganti namanya
                 if "MODE NORMAL" in title or "MODE APLIKASI" in title or "[MODE" in title or "Anda..." in title:
                     title = "Riwayat Lama"
                 cleaned_rows.append((sess_id, title))
@@ -408,31 +407,38 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
-            /* -- KUSTOMISASI CSS SIDEBAR (13px GAYA GEMINI) -- */
-            [data-testid="stSidebar"] .stButton > button {
+            /* -- PERBAIKAN CSS SIDEBAR (MENGHAPUS KOTAK & RATA KIRI) -- */
+            
+            /* 1. Menghilangkan kotak dan latar belakang default untuk SEMUA tombol di Sidebar */
+            [data-testid="stSidebar"] .stButton > button,
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
                 border: none !important;
+                box-shadow: none !important;
                 background-color: transparent !important;
-                color: var(--text-color) !important;
-                text-align: left !important;
-                justify-content: flex-start !important;
-                padding: 0.3rem 0.5rem !important;
+            }
+
+            /* 2. Format Tombol Teks Judul Obrolan (Memaksa Rata Kiri) */
+            [data-testid="stSidebar"] .stButton > button {
+                justify-content: flex-start !important; /* Rata Kiri */
+                padding: 0.4rem 0.5rem !important;
                 border-radius: 8px !important;
                 width: 100% !important;
-                box-shadow: none !important;
                 min-height: 35px !important;
             }
             
-            /* TARGETING SEMUA ELEMEN TEKS DI DALAM TOMBOL AGAR SUPER KECIL */
+            /* 3. Menargetkan langsung teks di dalam tombol agar benar-benar di kiri */
             [data-testid="stSidebar"] .stButton > button p,
             [data-testid="stSidebar"] .stButton > button div,
             [data-testid="stSidebar"] .stButton > button span {
                 font-size: 13px !important;
                 font-weight: 500 !important;
+                text-align: left !important; /* Rata Kiri */
                 margin: 0px !important;
-                line-height: 1.2 !important;
             }
             
-            [data-testid="stSidebar"] .stButton > button:hover {
+            /* 4. Efek Hover & Warna Obrolan Aktif */
+            [data-testid="stSidebar"] .stButton > button:hover,
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] {
@@ -441,6 +447,22 @@ def inject_custom_css():
             [data-testid="stSidebar"] .stButton > button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
+            }
+
+            /* 5. Format Khusus Tombol 3 Titik (Popover) */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 50% !important;
+                height: 35px !important;
+                width: 30px !important;
+                color: var(--text-color) !important;
+                opacity: 0.6;
+            }
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
+                opacity: 1;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -557,26 +579,31 @@ def main():
         if sessions:
             with st.container(height=350, border=False):
                 for sess_id, title in sessions:
-                    col_btn, col_del = st.columns([7, 1], gap="small") 
+                    # MENGUBAH PROPORSINYA AGAR TOMBOL JUDUL LEBIH LEBAR
+                    col_btn, col_dots = st.columns([7.5, 1], gap="small", vertical_alignment="center") 
+                    
                     with col_btn:
                         btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        display_title = title[:28] + "..." if len(title) > 28 else title
+                        display_title = title[:24] + "..." if len(title) > 24 else title
                         if st.button(display_title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id, st.session_state.username)
                             st.session_state.tahap2_pending = False
                             st.session_state.trigger_tahap2 = False
                             st.rerun()
-                    with col_del:
-                        if st.button("✕", key=f"del_{sess_id}", help="Hapus obrolan", type="secondary"):
-                            DatabaseManager.delete_session(sess_id)
-                            if st.session_state.current_session_id == sess_id:
-                                st.session_state.current_session_id = None
-                                st.session_state.messages = [
-                                    {"role": "system", "content": get_system_prompt(st.session_state.username)},
-                                    {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
-                                ]
-                            st.rerun()
+                            
+                    with col_dots:
+                        # MENGGUNAKAN POPOVER (3 TITIK) SEBAGAI MENU DROPDOWN
+                        with st.popover("⋮", use_container_width=True):
+                            if st.button("🗑️ Hapus Obrolan", key=f"del_{sess_id}", use_container_width=True):
+                                DatabaseManager.delete_session(sess_id)
+                                if st.session_state.current_session_id == sess_id:
+                                    st.session_state.current_session_id = None
+                                    st.session_state.messages = [
+                                        {"role": "system", "content": get_system_prompt(st.session_state.username)},
+                                        {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
+                                    ]
+                                st.rerun()
 
         st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         st.divider()
@@ -614,6 +641,14 @@ def main():
             content = message["content"]
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
             
+            if message["role"] == "user":
+                if "Pertanyaan/Instruksi Pengguna:\n" in text_disp:
+                    text_disp = text_disp.split("Pertanyaan/Instruksi Pengguna:\n")[-1]
+                text_disp = re.sub(r'\[MODE.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[ISI WEBSITE.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[DATA PASAR.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[KONTEN DOKUMEN\]', '', text_disp, flags=re.DOTALL).strip()
+
             st.markdown(text_disp)
             
             if message["role"] == "assistant":
@@ -688,7 +723,6 @@ def main():
         else:
             with st.chat_message("user"): st.markdown(prompt)
             
-            # MEMORI HANYA MENYIMPAN TEKS MURNI
             if st.session_state.temp_image:
                 base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
                 st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
@@ -752,7 +786,6 @@ def main():
                         placeholder.markdown(hasil_final)
                         
                     else:
-                        # DUPLIKASI MEMORI HANYA UNTUK API (TIDAK TERSIMPAN DI LAYAR)
                         payload_msgs = copy.deepcopy(st.session_state.messages)
                         
                         teks_tambahan = ""
@@ -773,7 +806,6 @@ def main():
                             potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
                             if potensi_ticker: teks_tambahan += f"\n[DATA PASAR TERBARU]\n{MarketUtils.ambil_data_pasar(potensi_ticker[0])}\n"
 
-                        # SUNTIKKAN INSTRUKSI RAHASIA (HANYA UNTUK API)
                         if teks_tambahan:
                             last_idx = len(payload_msgs) - 1
                             orig_content = payload_msgs[last_idx]["content"]
