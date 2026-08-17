@@ -159,20 +159,14 @@ class DatabaseManager:
             
             cleaned_rows = []
             for sess_id, title in rows:
-                # PENYELAMATAN JUDUL LAMA: Ekstrak teks asli tanpa mengubahnya jadi "Riwayat Lama"
                 if "Pertanyaan/Instruksi Pengguna:" in title:
                     title = title.split("Pertanyaan/Instruksi Pengguna:")[-1]
-                
-                # Menghapus instruksi yang terpotong di database
                 title = re.sub(r'\[MODE.*?\]', '', title)
                 title = re.sub(r'\[MODE.*?AKTIF:', '', title) 
                 title = title.replace("Anda...", "")
                 title = title.strip()
-                
-                # Jika setelah dibersihkan teksnya kosong, beri nama "Obrolan"
                 if not title or title == "...":
-                    title = "Obrolan"
-                    
+                    title = "Obrolan Lama"
                 cleaned_rows.append((sess_id, title))
             return cleaned_rows
 
@@ -444,8 +438,7 @@ def inject_custom_css():
                 margin: 0px !important;
             }
             
-            [data-testid="stSidebar"] .stButton > button:hover,
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
+            [data-testid="stSidebar"] .stButton > button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] {
@@ -456,24 +449,39 @@ def inject_custom_css():
                 font-weight: 600 !important;
             }
 
-            /* 5. Format Khusus Tombol 3 Titik (Popover) */
+            /* 5. PEMBUNUHAN TOTAL PANAH CHEVRON DI POPOVER (TITIK 3) */
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
                 padding: 0 !important;
-                display: flex !important;
+                display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 border-radius: 8px !important;
-                height: 35px !important;
-                width: 30px !important;
+                height: 32px !important;
+                width: 32px !important;
                 color: var(--text-color) !important;
-                opacity: 0.6;
-            }
-            /* MENGHILANGKAN IKON PANAH (CHEVRON) BAWAAN STREAMLIT POPOVER */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button svg {
-                display: none !important;
+                opacity: 0.6 !important;
             }
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-                opacity: 1;
+                opacity: 1 !important;
+                background-color: var(--secondary-background-color) !important;
+            }
+            
+            /* Menyembunyikan icon SVG Chevron (Panah bawah) bawaan Streamlit */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button svg {
+                display: none !important;
+                visibility: hidden !important;
+                width: 0 !important;
+                height: 0 !important;
+            }
+            /* Menyembunyikan container kedua jika panahnya bukan SVG murni */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button div:last-child:not([data-testid="stMarkdownContainer"]) {
+                display: none !important;
+            }
+            /* Memaksa text ⋮ tetap di tengah setelah panah dibunuh */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button p {
+                margin: 0 !important;
+                padding: 0 !important;
+                text-align: center !important;
             }
         </style>
     """, unsafe_allow_html=True)
