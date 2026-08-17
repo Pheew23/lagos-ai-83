@@ -413,75 +413,91 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
-            /* -- PERBAIKAN CSS SIDEBAR (MENGHAPUS KOTAK & RATA KIRI) -- */
-            [data-testid="stSidebar"] .stButton > button,
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
+            /* =========================================
+               CSS SUPER AGRESIF UNTUK SIDEBAR
+               ========================================= */
+            
+            /* 1. Reset Semua Tombol Sidebar (Membunuh Kotak) */
+            [data-testid="stSidebar"] button {
                 border: none !important;
                 box-shadow: none !important;
-                background-color: transparent !important;
-            }
-
-            [data-testid="stSidebar"] .stButton > button {
-                justify-content: flex-start !important;
-                padding: 0.4rem 0.5rem !important;
-                border-radius: 8px !important;
-                width: 100% !important;
                 min-height: 35px !important;
             }
             
-            [data-testid="stSidebar"] .stButton > button p,
-            [data-testid="stSidebar"] .stButton > button div,
-            [data-testid="stSidebar"] .stButton > button span {
-                font-size: 13px !important;
-                font-weight: 500 !important;
-                text-align: left !important;
-                margin: 0px !important;
+            /* 2. RATA KIRI untuk Tombol Riwayat Chat */
+            [data-testid="stSidebar"] .stButton > button {
+                justify-content: flex-start !important;
+                background-color: transparent !important;
+                padding: 0.4rem 0.5rem !important;
+                border-radius: 8px !important;
+                width: 100% !important;
             }
-            
             [data-testid="stSidebar"] .stButton > button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
             }
+            
+            /* 3. Paksa Teks Chat Rata Kiri & Font 13px */
+            [data-testid="stSidebar"] .stButton > button div[data-testid="stMarkdownContainer"] {
+                width: 100% !important;
+                display: flex !important;
+                justify-content: flex-start !important;
+            }
+            [data-testid="stSidebar"] .stButton > button p {
+                text-align: left !important;
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                margin: 0 !important;
+            }
             [data-testid="stSidebar"] .stButton > button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
             }
 
-            /* 5. PEMBUNUHAN TOTAL PANAH CHEVRON DI POPOVER (TITIK 3) */
+            /* 4. POPOVER TITIK TIGA (MENGHAPUS PANAH & KOTAK TOTAL) */
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
+                background-color: transparent !important;
                 padding: 0 !important;
-                display: inline-flex !important;
+                margin: 0 !important;
+                width: 30px !important;
+                height: 35px !important;
+                border-radius: 8px !important;
+                display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                border-radius: 8px !important;
-                height: 32px !important;
-                width: 32px !important;
-                color: var(--text-color) !important;
-                opacity: 0.6 !important;
             }
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
-                opacity: 1 !important;
                 background-color: var(--secondary-background-color) !important;
             }
             
-            /* Menyembunyikan icon SVG Chevron (Panah bawah) bawaan Streamlit */
+            /* INI YANG AKAN MEMBUNUH PANAH (CHEVRON) SVG SECARA PERMANEN */
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button svg {
                 display: none !important;
-                visibility: hidden !important;
                 width: 0 !important;
                 height: 0 !important;
+                visibility: hidden !important;
             }
-            /* Menyembunyikan container kedua jika panahnya bukan SVG murni */
-            [data-testid="stSidebar"] div[data-testid="stPopover"] > button div:last-child:not([data-testid="stMarkdownContainer"]) {
+            
+            /* Membunuh sisa ruang panah di sebelah titik 3 */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button > div:nth-child(2) {
                 display: none !important;
             }
-            /* Memaksa text ⋮ tetap di tengah setelah panah dibunuh */
+            
+            /* Memastikan teks "⋮" persis di tengah */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button div[data-testid="stMarkdownContainer"] {
+                width: 100% !important;
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+            }
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button p {
-                margin: 0 !important;
-                padding: 0 !important;
                 text-align: center !important;
+                margin: 0 !important;
+                font-size: 18px !important;
+                line-height: 1 !important;
+                font-weight: bold !important;
             }
         </style>
     """, unsafe_allow_html=True)
