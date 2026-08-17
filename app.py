@@ -93,7 +93,10 @@ Jika diminta PPT, kembalikan MURNI dalam JSON:
 # FUNGSI PEMBANTU (SAPAAN & KONTEKS USER)
 # ==========================================
 def get_time_greeting() -> str:
-    hour = datetime.datetime.now().hour
+    # Mengambil waktu server (UTC) lalu ditambah 7 jam agar menjadi WIB (Waktu Indonesia Barat)
+    waktu_wib = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
+    hour = waktu_wib.hour
+    
     if 5 <= hour < 11:
         return "Selamat pagi"
     elif 11 <= hour < 15:
