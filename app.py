@@ -92,7 +92,6 @@ Jika diminta PPT, kembalikan MURNI dalam JSON:
 # FUNGSI PEMBANTU (SAPAAN & KONTEKS USER)
 # ==========================================
 def get_time_greeting() -> str:
-    # Mengambil waktu server (UTC) lalu ditambah 7 jam agar menjadi WIB
     waktu_wib = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
     hour = waktu_wib.hour
     
@@ -156,7 +155,18 @@ class DatabaseManager:
         with cls.get_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT session_id, title FROM sessions WHERE username=? ORDER BY updated_at DESC", (username,))
-            return c.fetchall()
+            rows = c.fetchall()
+            
+            cleaned_rows = []
+            for sess_id, title in rows:
+                # Membersihkan judul-judul kotor yang telanjur tersimpan di database lama
+                if "[MODE" in title or "Pertanyaan/" in title:
+                    title = re.sub(r'\[.*?\]', '', title)
+                    title = title.replace("Pertanyaan/Instruksi Pengguna:", "")
+                    title = title.replace("\n", " ").strip()
+                    if not title: title = "Obrolan Lama"
+                cleaned_rows.append((sess_id, title))
+            return cleaned_rows
 
     @classmethod
     def load_session_messages(cls, session_id: str, username: str) -> List[Dict[str, Any]]:
@@ -311,19 +321,8 @@ class MediaUtils:
             if msg["role"] == "user":
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-                
-                # --- PEMBERSIHAN JUDUL EKSTRA KETAT ---
-                # 1. Ambil teks murni setelah penanda "Pertanyaan/Instruksi Pengguna:"
-                if "Pertanyaan/Instruksi Pengguna:" in text:
-                    text = text.split("Pertanyaan/Instruksi Pengguna:")[-1]
-                
-                # 2. Hapus paksa apapun yang berada di dalam kurung siku [...] jika masih tersisa
-                text = re.sub(r'\[.*?\]', '', text, flags=re.DOTALL)
-                
-                # 3. Bersihkan spasi ganda dan enter
-                text = re.sub(r'\s+', ' ', text).strip()
-                
-                return text[:28] + "..." if len(text) > 28 else (text if text else "Obrolan Baru")
+                text = text.strip()
+                return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
     @staticmethod
@@ -412,36 +411,33 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
-            /* -- KUSTOMISASI TAMPILAN SIDEBAR (GAYA GEMINI) -- */
-            section[data-testid="stSidebar"] .stButton button {
+            /* -- KUSTOMISASI CSS SIDEBAR (13px GAYA GEMINI) -- */
+            [data-testid="stSidebar"] .stButton > button {
                 border: none !important;
                 background-color: transparent !important;
                 color: var(--text-color) !important;
-                justify-content: flex-start !important;
                 text-align: left !important;
-                padding: 0.3rem 0.6rem !important;
-                border-radius: 10px !important;
+                justify-content: flex-start !important;
+                padding: 0.4rem 0.5rem !important;
+                border-radius: 8px !important;
+                width: 100% !important;
                 box-shadow: none !important;
             }
-            
-            /* -- FONT TOMBOL SIDEBAR LEBIH KECIL -- */
-            section[data-testid="stSidebar"] .stButton button p, 
-            section[data-testid="stSidebar"] .stButton button div,
-            section[data-testid="stSidebar"] .stButton button span {
-                font-size: 0.8rem !important; /* Diatur mirip font Gemini Sidebar */
-                font-weight: 500 !important;
-                margin: 0px !important;
-            }
-            
-            section[data-testid="stSidebar"] .stButton button:hover {
+            [data-testid="stSidebar"] .stButton > button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
-            section[data-testid="stSidebar"] .stButton button[kind="primary"] {
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
             }
-            section[data-testid="stSidebar"] .stButton button[kind="primary"] p {
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] * {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
+            }
+            /* MEMAKSA FONT MENGECIL */
+            [data-testid="stSidebar"] .stButton > button * {
+                font-size: 13px !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -615,6 +611,15 @@ def main():
             content = message["content"]
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
             
+            # Membersihkan sisa-sisa injeksi rahasia agar tidak terlihat di UI obrolan lama
+            if message["role"] == "user":
+                if "Pertanyaan/Instruksi Pengguna:\n" in text_disp:
+                    text_disp = text_disp.split("Pertanyaan/Instruksi Pengguna:\n")[-1]
+                text_disp = re.sub(r'\[MODE.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[ISI WEBSITE.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[DATA PASAR.*?\]', '', text_disp, flags=re.DOTALL)
+                text_disp = re.sub(r'\[KONTEN DOKUMEN\]', '', text_disp, flags=re.DOTALL).strip()
+
             st.markdown(text_disp)
             
             if message["role"] == "assistant":
@@ -688,32 +693,13 @@ def main():
             st.session_state.trigger_tahap2 = False 
         else:
             with st.chat_message("user"): st.markdown(prompt)
-            teks_tambahan = ""
             
-            if app_mode:
-                teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
-            else:
-                teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
-            
-            if st.session_state.temp_doc:
-                teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-                if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN]\n{teks_dok}\n"
-
-            urls_found = re.compile(r'https?://\S+').findall(prompt)
-            for url in urls_found:
-                teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{MediaUtils.ambil_teks_dari_link(url)[:4000]}\n"
-
-            if any(kata in prompt.lower() for kata in ["analisis", "short", "long", "beli", "jual", "prospek"]):
-                potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
-                if potensi_ticker: teks_tambahan += f"\n[DATA PASAR TERBARU]\n{MarketUtils.ambil_data_pasar(potensi_ticker[0])}\n"
-
-            final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
-
+            # KINI MEMORI HANYA MENYIMPAN TEKS MURNI, TANPA INSTRUKSI RAHASIA
             if st.session_state.temp_image:
                 base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
-                st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": final_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
+                st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
             else:
-                st.session_state.messages.append({"role": "user", "content": final_prompt})
+                st.session_state.messages.append({"role": "user", "content": prompt})
 
         with st.chat_message("assistant"):
             client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
@@ -772,9 +758,37 @@ def main():
                         placeholder.markdown(hasil_final)
                         
                     else:
-                        is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
+                        # MENDUPLIKAT MEMORI HANYA UNTUK DIKIRIM KE API (DI BALIK LAYAR)
                         payload_msgs = copy.deepcopy(st.session_state.messages)
                         
+                        teks_tambahan = ""
+                        if app_mode:
+                            teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
+                        else:
+                            teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
+                        
+                        if st.session_state.temp_doc:
+                            teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
+                            if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN]\n{teks_dok}\n"
+
+                        urls_found = re.compile(r'https?://\S+').findall(prompt)
+                        for url in urls_found:
+                            teks_tambahan += f"\n[ISI WEBSITE: {url}]\n{MediaUtils.ambil_teks_dari_link(url)[:4000]}\n"
+
+                        if any(kata in prompt.lower() for kata in ["analisis", "short", "long", "beli", "jual", "prospek"]):
+                            potensi_ticker = re.findall(r'\b[A-Z]{3,5}(?:-[A-Z]+|\.JK)?\b', prompt.upper())
+                            if potensi_ticker: teks_tambahan += f"\n[DATA PASAR TERBARU]\n{MarketUtils.ambil_data_pasar(potensi_ticker[0])}\n"
+
+                        # MENYUNTIKKAN INSTRUKSI RAHASIA KE DALAM PESAN TERAKHIR (HANYA KE API)
+                        if teks_tambahan:
+                            last_idx = len(payload_msgs) - 1
+                            orig_content = payload_msgs[last_idx]["content"]
+                            if isinstance(orig_content, list):
+                                payload_msgs[last_idx]["content"][0]["text"] = f"{teks_tambahan}\nPertanyaan/Instruksi Pengguna:\n{prompt}"
+                            else:
+                                payload_msgs[last_idx]["content"] = f"{teks_tambahan}\nPertanyaan/Instruksi Pengguna:\n{prompt}"
+
+                        is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
                         if is_web_app:
                             st.info("⏳ Mode Web/App (Saklar ON): Memproses Tahap 1...")
                             instruksi_tahap_1 = "\n\n[PENTING]: Kerjakan dalam 2 TAHAP. TAHAP 1: Buat struktur HTML & CSS saja (bisa tambahkan framework seperti Tailwind/Bootstrap). Tuliskan di dalam SATU blok " + B3 + "html. JANGAN tulis logika JavaScript."
