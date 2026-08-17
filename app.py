@@ -12,11 +12,6 @@ from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
 import requests
-import yfinance as yf
-from bs4 import BeautifulSoup
-from docx import Document
-from pptx import Presentation
-import speech_recognition as sr
 import streamlit as st
 import streamlit.components.v1 as components
 import extra_streamlit_components as stx
@@ -264,6 +259,12 @@ class DatabaseManager:
             c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
             conn.commit()
 
+# Caching Database Init agar tidak diulang-ulang (Optimasi Loading)
+@st.cache_resource(show_spinner=False)
+def setup_database():
+    DatabaseManager.init_db()
+    return True
+
 # ==========================================
 # 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS)
 # ==========================================
@@ -289,6 +290,7 @@ class MediaUtils:
             elif nama_file.endswith('.txt'):
                 teks_hasil = uploaded_file.read().decode("utf-8")
             elif nama_file.endswith('.docx'):
+                from docx import Document  # Lazy Loading
                 doc = Document(uploaded_file)
                 for para in doc.paragraphs: teks_hasil += para.text + "\n"
             return teks_hasil.strip()
@@ -297,6 +299,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_file_word(riwayat_pesan: List[Dict[str, Any]]) -> io.BytesIO:
+        from docx import Document # Lazy Loading
         doc = Document()
         doc.add_heading('Lagøs AI Agent - Analisis Laporan', 0)
         for msg in riwayat_pesan:
@@ -329,6 +332,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_dokumen_docx(konten: str) -> io.BytesIO:
+        from docx import Document # Lazy Loading
         doc = Document()
         for line in konten.split('\n'):
             line = line.strip()
@@ -346,7 +350,7 @@ class MediaUtils:
     @staticmethod
     def buat_dokumen_pdf(konten: str) -> io.BytesIO:
         try:
-            from fpdf import FPDF
+            from fpdf import FPDF # Lazy Loading
         except ImportError:
             raise ImportError("Fitur PDF diblokir karena library fpdf2 belum diinstal.")
             
@@ -393,6 +397,7 @@ class MediaUtils:
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
+            from bs4 import BeautifulSoup # Lazy loading
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -432,6 +437,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_file_ppt(data_json: dict) -> io.BytesIO:
+        from pptx import Presentation # Lazy Loading
         tema_pilihan = data_json.get("rekomendasi_tema", "bisnis").lower()
         peta = {"bisnis": "tema_bisnis.pptx", "kreatif": "tema_kreatif.pptx", "akademik": "tema_akademik.pptx", "gelap": "tema_gelap.pptx"}
         file_template = peta.get(tema_pilihan, "tema_bisnis.pptx")
@@ -467,6 +473,7 @@ class MediaUtils:
 class MarketUtils:
     @staticmethod
     def ambil_data_pasar(simbol_ticker: str) -> str:
+        import yfinance as yf # Lazy Loading
         try:
             if not simbol_ticker.endswith("-USD") and len(simbol_ticker) <= 5:
                 if simbol_ticker.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']:
@@ -481,6 +488,7 @@ class MarketUtils:
 class AgentTools:
     @staticmethod
     def cari_informasi_web(query: str) -> str:
+        from bs4 import BeautifulSoup # Lazy loading
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -513,6 +521,7 @@ class AgentTools:
 
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
+        from bs4 import BeautifulSoup # Lazy loading
         try:
             video_id = None
             if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
@@ -611,7 +620,7 @@ def init_session_state():
 def main():
     st.set_page_config(page_title="Lagøs AI Agent", page_icon="🤖", layout="centered", initial_sidebar_state="expanded")
     inject_custom_css()
-    DatabaseManager.init_db()
+    setup_database() # Panggil koneksi DB yang sudah di-cache
     init_session_state()
 
     cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -714,7 +723,6 @@ def main():
             st.session_state.del_cookie = True 
             st.rerun()
 
-    # RENDER OBROLAN
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] in ["system", "tool"]: continue
         
@@ -735,21 +743,18 @@ def main():
                 is_last_message = (idx == len(st.session_state.messages) - 1)
                 is_pending = is_last_message and st.session_state.get("tahap2_pending")
                 
-                # Render Web App
                 html_code = MediaUtils.ekstrak_kode_html(text_disp)
                 if html_code and not is_pending:
                     st.write("") 
                     if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
                         render_webapp_modal(html_code)
                 
-                # Render Presentasi PPT Otomatis
                 json_ppt = MediaUtils.ekstrak_json_ppt(text_disp)
                 if json_ppt:
                     st.write("")
                     ppt_file = MediaUtils.buat_file_ppt(json_ppt)
                     st.download_button("📊 Unduh Presentasi (.PPTX)", data=ppt_file, file_name=f"{json_ppt.get('judul_presentasi', 'Presentasi_Lagos')}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key=f"btn_ppt_{idx}", use_container_width=True, type="primary")
 
-                # Render Dokumen Word/PDF
                 dokumen_teks = MediaUtils.ekstrak_dokumen(text_disp)
                 if dokumen_teks and not is_pending:
                     st.write("")
@@ -776,7 +781,7 @@ def main():
             st.rerun()
 
     with st.container():
-        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML. Jika mati, AI akan menjawab biasa.")
+        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML.")
         
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
@@ -795,7 +800,9 @@ def main():
     prompt = prompt_text
     if audio_bytes and not prompt_text:
         with st.spinner("Menerjemahkan suara..."):
-            try: prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
+            try: 
+                import speech_recognition as sr # Lazy loading
+                prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
             except: st.warning("Suara tidak terdengar jelas.")
 
     is_tahap2_exec = st.session_state.get("trigger_tahap2", False)
