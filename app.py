@@ -414,82 +414,78 @@ def inject_custom_css():
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
             /* =========================================
-               PERBAIKAN CSS FINAL SIDEBAR
+               CSS FINAL: MENGHANCURKAN PANAH STREAMLIT
                ========================================= */
             
-            /* 1. Reset Tombol Sidebar */
-            [data-testid="stSidebar"] .stButton > button,
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button {
+            /* 1. Tombol Riwayat Chat (Rata Kiri, Tanpa Kotak) */
+            div[data-testid="stSidebar"] div.stButton button {
+                background-color: transparent !important;
                 border: none !important;
                 box-shadow: none !important;
-                background-color: transparent !important;
-                min-height: 35px !important;
-            }
-            
-            /* 2. RATA KIRI UNTUK TOMBOL RIWAYAT */
-            [data-testid="stSidebar"] .stButton > button {
+                justify-content: flex-start !important;
                 padding: 0.4rem 0.5rem !important;
                 border-radius: 8px !important;
                 width: 100% !important;
-                display: block !important; /* Paksa block agar tidak flex-center */
+                min-height: 35px !important;
             }
-            
-            /* Paksa teks di dalam tombol riwayat menjadi rata kiri */
-            [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {
-                width: 100% !important;
-                display: block !important;
+            div[data-testid="stSidebar"] div.stButton button:hover {
+                background-color: var(--secondary-background-color) !important;
             }
-            [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] p {
+            div[data-testid="stSidebar"] div.stButton button p {
                 text-align: left !important;
                 font-size: 13px !important;
                 font-weight: 500 !important;
                 margin: 0 !important;
             }
             
-            /* Efek Hover & Aktif */
-            [data-testid="stSidebar"] .stButton > button:hover,
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
-                background-color: var(--secondary-background-color) !important;
-            }
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+            /* Tombol Aktif */
+            div[data-testid="stSidebar"] div.stButton button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
             }
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] p {
+            div[data-testid="stSidebar"] div.stButton button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
             }
 
-            /* 3. MENGHANCURKAN PANAH DI TOMBOL TITIK 3 */
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button {
+            /* 2. POPOVER TITIK TIGA (MENGHAPUS PANAH) */
+            /* Hilangkan kotak luar */
+            div[data-testid="stSidebar"] div[data-testid="stPopover"] button {
+                background-color: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
                 padding: 0 !important;
-                width: 32px !important;
+                min-width: 30px !important;
+                width: 30px !important;
                 height: 35px !important;
                 border-radius: 8px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
             }
+            div[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover {
+                background-color: var(--secondary-background-color) !important;
+            }
             
-            /* Sembunyikan SEMUA elemen di dalam popover button KECUALI teks titik tiganya */
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button > *:not([data-testid="stMarkdownContainer"]) {
+            /* Hancurkan SVG (Panah Streamlit) dimanapun ia berada di dalam popover button */
+            div[data-testid="stSidebar"] div[data-testid="stPopover"] button svg {
                 display: none !important;
                 width: 0 !important;
                 height: 0 !important;
-                opacity: 0 !important;
             }
             
-            /* Format teks titik tiga */
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button [data-testid="stMarkdownContainer"] p {
+            /* Format teks titik tiga agar pas di tengah */
+            div[data-testid="stSidebar"] div[data-testid="stPopover"] button p {
                 text-align: center !important;
                 font-size: 18px !important;
                 font-weight: bold !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                line-height: 1 !important;
                 color: var(--text-color) !important;
-                opacity: 0.7;
+                opacity: 0.6 !important;
             }
-            [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover [data-testid="stMarkdownContainer"] p {
-                opacity: 1;
+            div[data-testid="stSidebar"] div[data-testid="stPopover"] button:hover p {
+                opacity: 1 !important;
             }
         </style>
     """, unsafe_allow_html=True)
