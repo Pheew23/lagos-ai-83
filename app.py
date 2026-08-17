@@ -159,8 +159,20 @@ class DatabaseManager:
             
             cleaned_rows = []
             for sess_id, title in rows:
-                if "MODE NORMAL" in title or "MODE APLIKASI" in title or "[MODE" in title or "Anda..." in title:
-                    title = "Riwayat Lama"
+                # PENYELAMATAN JUDUL LAMA: Ekstrak teks asli tanpa mengubahnya jadi "Riwayat Lama"
+                if "Pertanyaan/Instruksi Pengguna:" in title:
+                    title = title.split("Pertanyaan/Instruksi Pengguna:")[-1]
+                
+                # Menghapus instruksi yang terpotong di database
+                title = re.sub(r'\[MODE.*?\]', '', title)
+                title = re.sub(r'\[MODE.*?AKTIF:', '', title) 
+                title = title.replace("Anda...", "")
+                title = title.strip()
+                
+                # Jika setelah dibersihkan teksnya kosong, beri nama "Obrolan"
+                if not title or title == "...":
+                    title = "Obrolan"
+                    
                 cleaned_rows.append((sess_id, title))
             return cleaned_rows
 
@@ -408,8 +420,6 @@ def inject_custom_css():
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             
             /* -- PERBAIKAN CSS SIDEBAR (MENGHAPUS KOTAK & RATA KIRI) -- */
-            
-            /* 1. Menghilangkan kotak dan latar belakang default untuk SEMUA tombol di Sidebar */
             [data-testid="stSidebar"] .stButton > button,
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button {
                 border: none !important;
@@ -417,26 +427,23 @@ def inject_custom_css():
                 background-color: transparent !important;
             }
 
-            /* 2. Format Tombol Teks Judul Obrolan (Memaksa Rata Kiri) */
             [data-testid="stSidebar"] .stButton > button {
-                justify-content: flex-start !important; /* Rata Kiri */
+                justify-content: flex-start !important;
                 padding: 0.4rem 0.5rem !important;
                 border-radius: 8px !important;
                 width: 100% !important;
                 min-height: 35px !important;
             }
             
-            /* 3. Menargetkan langsung teks di dalam tombol agar benar-benar di kiri */
             [data-testid="stSidebar"] .stButton > button p,
             [data-testid="stSidebar"] .stButton > button div,
             [data-testid="stSidebar"] .stButton > button span {
                 font-size: 13px !important;
                 font-weight: 500 !important;
-                text-align: left !important; /* Rata Kiri */
+                text-align: left !important;
                 margin: 0px !important;
             }
             
-            /* 4. Efek Hover & Warna Obrolan Aktif */
             [data-testid="stSidebar"] .stButton > button:hover,
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
                 background-color: var(--secondary-background-color) !important;
@@ -455,11 +462,15 @@ def inject_custom_css():
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                border-radius: 50% !important;
+                border-radius: 8px !important;
                 height: 35px !important;
                 width: 30px !important;
                 color: var(--text-color) !important;
                 opacity: 0.6;
+            }
+            /* MENGHILANGKAN IKON PANAH (CHEVRON) BAWAAN STREAMLIT POPOVER */
+            [data-testid="stSidebar"] div[data-testid="stPopover"] > button svg {
+                display: none !important;
             }
             [data-testid="stSidebar"] div[data-testid="stPopover"] > button:hover {
                 opacity: 1;
@@ -579,7 +590,6 @@ def main():
         if sessions:
             with st.container(height=350, border=False):
                 for sess_id, title in sessions:
-                    # MENGUBAH PROPORSINYA AGAR TOMBOL JUDUL LEBIH LEBAR
                     col_btn, col_dots = st.columns([7.5, 1], gap="small", vertical_alignment="center") 
                     
                     with col_btn:
@@ -593,7 +603,6 @@ def main():
                             st.rerun()
                             
                     with col_dots:
-                        # MENGGUNAKAN POPOVER (3 TITIK) SEBAGAI MENU DROPDOWN
                         with st.popover("⋮", use_container_width=True):
                             if st.button("🗑️ Hapus Obrolan", key=f"del_{sess_id}", use_container_width=True):
                                 DatabaseManager.delete_session(sess_id)
