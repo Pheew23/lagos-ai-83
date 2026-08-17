@@ -30,7 +30,6 @@ DB_NAME = 'lagos_multiuser.db'
 API_KEY = st.secrets["NVIDIA_API_KEY"]
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 
-# Trik untuk menghindari bug render markdown di antarmuka web
 B3 = "`" * 3
 
 MODEL_MAPPING = {
@@ -93,7 +92,7 @@ Jika diminta PPT, kembalikan MURNI dalam JSON:
 # FUNGSI PEMBANTU (SAPAAN & KONTEKS USER)
 # ==========================================
 def get_time_greeting() -> str:
-    # Mengambil waktu server (UTC) lalu ditambah 7 jam agar menjadi WIB (Waktu Indonesia Barat)
+    # Mengambil waktu server (UTC) lalu ditambah 7 jam agar menjadi WIB
     waktu_wib = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
     hour = waktu_wib.hour
     
@@ -107,7 +106,6 @@ def get_time_greeting() -> str:
         return "Selamat malam"
 
 def get_system_prompt(username: str) -> str:
-    # Menambahkan identitas user yang sedang login agar AI mengingatnya
     return f"{SYSTEM_PROMPT}\n\n[INFO KONTEKS TAMBAHAN]\nPengguna yang sedang login dan berbicara dengan Anda saat ini bernama: {username}. Ingat nama ini baik-baik. Jika pengguna bertanya siapa namanya, sebutkan nama ini dengan ramah."
 
 # ==========================================
@@ -167,7 +165,6 @@ class DatabaseManager:
             c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
             rows = c.fetchall()
             
-        # Menggunakan system prompt dinamis yang berisi username
         msgs = [{"role": "system", "content": get_system_prompt(username)}]
         for r, content_str in rows:
             try: msgs.append({"role": r, "content": json.loads(content_str)})
@@ -314,7 +311,14 @@ class MediaUtils:
             if msg["role"] == "user":
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-                text = text.split("[AKHIR KONTEN]\n\n")[-1]
+                
+                # --- PERBAIKAN: Memotong injeksi Prompt di Belakang Layar ---
+                if "\nPertanyaan/Instruksi Pengguna:\n" in text:
+                    text = text.split("\nPertanyaan/Instruksi Pengguna:\n")[-1]
+                elif "[AKHIR KONTEN]\n\n" in text:
+                    text = text.split("[AKHIR KONTEN]\n\n")[-1]
+                
+                text = text.strip()
                 return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
@@ -411,17 +415,27 @@ def inject_custom_css():
                 color: var(--text-color) !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
-                padding: 0.4rem 0.6rem !important;
+                padding: 0.3rem 0.6rem !important; /* Diperkecil marginnya */
                 border-radius: 10px !important;
-                font-size: 0.85rem !important;
-                font-weight: 500 !important;
                 box-shadow: none !important;
             }
+            
+            /* -- PERBAIKAN: MENARGETKAN TEXT DI DALAM TOMBOL -- */
+            section[data-testid="stSidebar"] .stButton button p, 
+            section[data-testid="stSidebar"] .stButton button div,
+            section[data-testid="stSidebar"] .stButton button span {
+                font-size: 0.75rem !important; /* Dikecilkan mirip Gemini */
+                font-weight: 500 !important;
+                margin: 0px !important;
+            }
+            
             section[data-testid="stSidebar"] .stButton button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
             section[data-testid="stSidebar"] .stButton button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
+            }
+            section[data-testid="stSidebar"] .stButton button[kind="primary"] p {
                 color: #7d4eff !important;
                 font-weight: 600 !important;
             }
@@ -511,10 +525,8 @@ def main():
                         else: st.warning("⚠️ Harap isi data!")
         st.stop()
     
-    # MENGINISIALISASI SYSTEM PROMPT DINAMIS DAN SAPAAN OTOMATIS
     if st.session_state.logged_in:
         if len(st.session_state.messages) == 1 and st.session_state.messages[0]["role"] == "system":
-            # Jika ini percakapan baru, set system prompt khusus dan beri sapaan otomatis AI
             st.session_state.messages = [
                 {"role": "system", "content": get_system_prompt(st.session_state.username)},
                 {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
@@ -523,15 +535,11 @@ def main():
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Assistant AI</div>', unsafe_allow_html=True)
 
-    # ==========================================
-    # MODIFIKASI SIDEBAR GAYA GEMINI
-    # ==========================================
     with st.sidebar:
         st.markdown("<h2 style='margin-top: -20px; font-size: 1.4rem; display: flex; align-items: center; gap: 10px;'>✨ Lagøs AI 9.1</h2>", unsafe_allow_html=True)
         
         if st.button("📝 Percakapan baru", use_container_width=True):
             st.session_state.current_session_id = None
-            # Mulai ulang obrolan dengan identitas dan sapaan yang baru
             st.session_state.messages = [
                 {"role": "system", "content": get_system_prompt(st.session_state.username)},
                 {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
