@@ -90,6 +90,24 @@ Jika diminta PPT, kembalikan MURNI dalam JSON:
 %s""" % (B3, B3, B3, B3)
 
 # ==========================================
+# FUNGSI PEMBANTU (SAPAAN & KONTEKS USER)
+# ==========================================
+def get_time_greeting() -> str:
+    hour = datetime.datetime.now().hour
+    if 5 <= hour < 11:
+        return "Selamat pagi"
+    elif 11 <= hour < 15:
+        return "Selamat siang"
+    elif 15 <= hour < 18:
+        return "Selamat sore"
+    else:
+        return "Selamat malam"
+
+def get_system_prompt(username: str) -> str:
+    # Menambahkan identitas user yang sedang login agar AI mengingatnya
+    return f"{SYSTEM_PROMPT}\n\n[INFO KONTEKS TAMBAHAN]\nPengguna yang sedang login dan berbicara dengan Anda saat ini bernama: {username}. Ingat nama ini baik-baik. Jika pengguna bertanya siapa namanya, sebutkan nama ini dengan ramah."
+
+# ==========================================
 # 2. MANAJER DATABASE
 # ==========================================
 class DatabaseManager:
@@ -140,13 +158,14 @@ class DatabaseManager:
             return c.fetchall()
 
     @classmethod
-    def load_session_messages(cls, session_id: str) -> List[Dict[str, Any]]:
+    def load_session_messages(cls, session_id: str, username: str) -> List[Dict[str, Any]]:
         with cls.get_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
             rows = c.fetchall()
             
-        msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Menggunakan system prompt dinamis yang berisi username
+        msgs = [{"role": "system", "content": get_system_prompt(username)}]
         for r, content_str in rows:
             try: msgs.append({"role": r, "content": json.loads(content_str)})
             except: msgs.append({"role": r, "content": content_str})
@@ -398,7 +417,6 @@ def inject_custom_css():
             section[data-testid="stSidebar"] .stButton button:hover {
                 background-color: var(--secondary-background-color) !important;
             }
-            /* Warna khusus untuk riwayat chat yang aktif */
             section[data-testid="stSidebar"] .stButton button[kind="primary"] {
                 background-color: rgba(125, 78, 255, 0.15) !important;
                 color: #7d4eff !important;
@@ -490,6 +508,15 @@ def main():
                         else: st.warning("⚠️ Harap isi data!")
         st.stop()
     
+    # MENGINISIALISASI SYSTEM PROMPT DINAMIS DAN SAPAAN OTOMATIS
+    if st.session_state.logged_in:
+        if len(st.session_state.messages) == 1 and st.session_state.messages[0]["role"] == "system":
+            # Jika ini percakapan baru, set system prompt khusus dan beri sapaan otomatis AI
+            st.session_state.messages = [
+                {"role": "system", "content": get_system_prompt(st.session_state.username)},
+                {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
+            ]
+
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Assistant AI</div>', unsafe_allow_html=True)
 
@@ -497,20 +524,21 @@ def main():
     # MODIFIKASI SIDEBAR GAYA GEMINI
     # ==========================================
     with st.sidebar:
-        # Header Aplikasi di Sidebar
         st.markdown("<h2 style='margin-top: -20px; font-size: 1.4rem; display: flex; align-items: center; gap: 10px;'>✨ Lagøs AI 9.1</h2>", unsafe_allow_html=True)
         
-        # Tombol Percakapan Baru
         if st.button("📝 Percakapan baru", use_container_width=True):
             st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            # Mulai ulang obrolan dengan identitas dan sapaan yang baru
+            st.session_state.messages = [
+                {"role": "system", "content": get_system_prompt(st.session_state.username)},
+                {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
+            ]
             st.session_state.tahap2_pending = False
             st.session_state.trigger_tahap2 = False
             st.rerun()
 
         st.markdown("<p style='font-size: 0.8rem; color: #888; margin-top: 20px; margin-bottom: 5px; font-weight: 600;'>Terbaru</p>", unsafe_allow_html=True)
         
-        # Daftar Riwayat Obrolan
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
         if sessions:
             with st.container(height=350, border=False):
@@ -518,11 +546,10 @@ def main():
                     col_btn, col_del = st.columns([7, 1], gap="small") 
                     with col_btn:
                         btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        # Potong judul agar rapi jika kepanjangan
                         display_title = title[:28] + "..." if len(title) > 28 else title
                         if st.button(display_title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                             st.session_state.current_session_id = sess_id
-                            st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
+                            st.session_state.messages = DatabaseManager.load_session_messages(sess_id, st.session_state.username)
                             st.session_state.tahap2_pending = False
                             st.session_state.trigger_tahap2 = False
                             st.rerun()
@@ -531,10 +558,12 @@ def main():
                             DatabaseManager.delete_session(sess_id)
                             if st.session_state.current_session_id == sess_id:
                                 st.session_state.current_session_id = None
-                                st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                                st.session_state.messages = [
+                                    {"role": "system", "content": get_system_prompt(st.session_state.username)},
+                                    {"role": "assistant", "content": f"{get_time_greeting()}, **{st.session_state.username}**! 👋 Ada yang bisa saya bantu hari ini?"}
+                                ]
                             st.rerun()
 
-        # Pemisah & Pengaturan Bawah
         st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         st.divider()
         st.markdown("<p style='font-size: 0.8rem; color: #888; margin-bottom: 5px; font-weight: 600;'>Pengaturan</p>", unsafe_allow_html=True)
@@ -546,7 +575,6 @@ def main():
 
         st.write("") 
         
-        # Area Profil Pengguna & Tombol Keluar di Bawah
         col_img, col_info, col_logout = st.columns([1.5, 5, 1.5])
         with col_img:
             st.markdown("<div style='width: 32px; height: 32px; border-radius: 50%; background-color: #7d4eff; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;'>👤</div>", unsafe_allow_html=True)
@@ -578,21 +606,18 @@ def main():
                 is_last_message = (idx == len(st.session_state.messages) - 1)
                 is_pending = is_last_message and st.session_state.get("tahap2_pending")
                 
-                # Cek HTML Web App
                 html_code = MediaUtils.ekstrak_kode_html(text_disp)
                 if html_code and not is_pending:
                     st.write("") 
                     if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
                         render_webapp_modal(html_code)
                 
-                # Cek PPT
                 json_ppt = MediaUtils.ekstrak_json_ppt(text_disp)
                 if json_ppt:
                     st.write("")
                     ppt_file = MediaUtils.buat_file_ppt(json_ppt)
                     st.download_button("📊 Unduh Presentasi (.PPTX)", data=ppt_file, file_name=f"{json_ppt.get('judul_presentasi', 'PPT')}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key=f"btn_ppt_{idx}", use_container_width=True, type="primary")
 
-                # Cek Dokumen PDF/DOCX
                 dokumen_teks = MediaUtils.ekstrak_dokumen(text_disp)
                 if dokumen_teks and not is_pending:
                     st.write("")
@@ -619,7 +644,6 @@ def main():
             st.rerun()
 
     with st.container():
-        # SAKLAR APLIKASI
         app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML. Jika mati, AI akan menjawab biasa.")
         
         uploader_idx = st.session_state.uploader_key
@@ -651,7 +675,6 @@ def main():
             with st.chat_message("user"): st.markdown(prompt)
             teks_tambahan = ""
             
-            # INJEKSI STATUS SAKLAR 
             if app_mode:
                 teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
             else:
@@ -705,10 +728,6 @@ def main():
                                     full_response += delta
                                     placeholder.markdown("⏳ **Menyusun Tahap 2 (JavaScript)...**\n\n" + full_response + "▌")
                                     
-                        # ====================================================
-                        # LOGIKA PENGGABUNGAN KODE YANG SUDAH DIPERBAIKI
-                        # ====================================================
-                        # 1. Bersihkan kode Tahap 2 (Hanya ambil isi JS-nya)
                         teks_tahap2 = full_response
                         if teks_tahap2.count(B3) % 2 != 0: teks_tahap2 += f"\n{B3}"
                         
@@ -716,11 +735,9 @@ def main():
                         kode_tahap2 = "\n".join(blok_kode2) if blok_kode2 else teks_tahap2.replace(B3, '')
                         kode_tahap2 = kode_tahap2.strip()
                         
-                        # Pastikan terbungkus tag script jika belum ada
                         if kode_tahap2 and "<script" not in kode_tahap2.lower():
                             kode_tahap2 = f"<script>\n{kode_tahap2}\n</script>"
 
-                        # 2. Ambil isi bersih HTML dari Tahap 1
                         last_msg_content = st.session_state.messages[-1]["content"]
                         teks_tahap1 = last_msg_content
                         if teks_tahap1.count(B3) % 2 != 0: teks_tahap1 += f"\n{B3}"
@@ -729,13 +746,11 @@ def main():
                         kode_tahap1 = blok_kode1[0] if blok_kode1 else teks_tahap1.replace(f'{B3}html', '').replace(B3, '')
                         kode_tahap1 = kode_tahap1.strip()
                         
-                        # 3. Suntikkan JS Tahap 2 ke dalam HTML Tahap 1 menggunakan lambda yang aman 100%
                         if re.search(r'</body>', kode_tahap1, re.IGNORECASE):
                             gabungan_bersih = re.sub(r'</body>', lambda _: f'\n{kode_tahap2}\n</body>', kode_tahap1, flags=re.IGNORECASE)
                         else:
                             gabungan_bersih = kode_tahap1 + "\n\n" + kode_tahap2
                             
-                        # 4. Buat SATU blok Markdown utuh dan timpa riwayat pesan
                         hasil_final = f"Berikut adalah aplikasi web lengkapnya:\n\n{B3}html\n{gabungan_bersih}\n{B3}"
                         
                         st.session_state.messages[-1]["content"] = hasil_final 
