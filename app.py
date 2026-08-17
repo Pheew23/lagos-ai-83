@@ -312,14 +312,18 @@ class MediaUtils:
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
                 
-                # --- PERBAIKAN: Memotong injeksi Prompt di Belakang Layar ---
-                if "\nPertanyaan/Instruksi Pengguna:\n" in text:
-                    text = text.split("\nPertanyaan/Instruksi Pengguna:\n")[-1]
-                elif "[AKHIR KONTEN]\n\n" in text:
-                    text = text.split("[AKHIR KONTEN]\n\n")[-1]
+                # --- PEMBERSIHAN JUDUL EKSTRA KETAT ---
+                # 1. Ambil teks murni setelah penanda "Pertanyaan/Instruksi Pengguna:"
+                if "Pertanyaan/Instruksi Pengguna:" in text:
+                    text = text.split("Pertanyaan/Instruksi Pengguna:")[-1]
                 
-                text = text.strip()
-                return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
+                # 2. Hapus paksa apapun yang berada di dalam kurung siku [...] jika masih tersisa
+                text = re.sub(r'\[.*?\]', '', text, flags=re.DOTALL)
+                
+                # 3. Bersihkan spasi ganda dan enter
+                text = re.sub(r'\s+', ' ', text).strip()
+                
+                return text[:28] + "..." if len(text) > 28 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
     @staticmethod
@@ -415,16 +419,16 @@ def inject_custom_css():
                 color: var(--text-color) !important;
                 justify-content: flex-start !important;
                 text-align: left !important;
-                padding: 0.3rem 0.6rem !important; /* Diperkecil marginnya */
+                padding: 0.3rem 0.6rem !important;
                 border-radius: 10px !important;
                 box-shadow: none !important;
             }
             
-            /* -- PERBAIKAN: MENARGETKAN TEXT DI DALAM TOMBOL -- */
+            /* -- FONT TOMBOL SIDEBAR LEBIH KECIL -- */
             section[data-testid="stSidebar"] .stButton button p, 
             section[data-testid="stSidebar"] .stButton button div,
             section[data-testid="stSidebar"] .stButton button span {
-                font-size: 0.75rem !important; /* Dikecilkan mirip Gemini */
+                font-size: 0.8rem !important; /* Diatur mirip font Gemini Sidebar */
                 font-weight: 500 !important;
                 margin: 0px !important;
             }
