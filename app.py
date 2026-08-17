@@ -393,13 +393,27 @@ class MediaUtils:
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0'} 
-            response = requests.get(url, headers=headers, timeout=10)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.google.com/'
+            } 
+            response = requests.get(url, headers=headers, timeout=15)
+            
+            if response.status_code in [403, 401, 406]:
+                return f"Pesan Sistem: Akses ditolak oleh website (Error {response.status_code}). Website ini dilindungi Anti-Bot/Cloudflare."
+                
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
-            text = ' '.join([p.get_text() for p in soup.find_all('p')])
+            text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'article'])])
+            
+            if not text.strip():
+                return "Pesan Sistem: Berhasil membuka web, tetapi konten kosong. Kemungkinan web ini menggunakan JavaScript penuh."
+                
             return re.sub(r'\s+', ' ', text).strip()
-        except Exception as e: return f"Error Link: {str(e)}"
+        except Exception as e: 
+            return f"Error Link: {str(e)}"
 
     @staticmethod
     def ekstrak_kode_html(teks: str) -> Optional[str]:
@@ -459,7 +473,7 @@ class MarketUtils:
                     simbol_ticker = f"{simbol_ticker.upper()}-USD"
             ticker = yf.Ticker(simbol_ticker)
             hist = ticker.history(period="5d")
-            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan."
+            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan. Mohon beritahu pengguna."
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e: return f"Gagal mengambil data dari API: {str(e)}"
@@ -468,31 +482,44 @@ class AgentTools:
     @staticmethod
     def cari_informasi_web(query: str) -> str:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://lite.duckduckgo.com',
+                'Referer': 'https://lite.duckduckgo.com/'
+            }
             data = {'q': query}
-            response = requests.post('https://lite.duckduckgo.com/lite/', headers=headers, data=data, timeout=10)
+            
+            response = requests.post('https://lite.duckduckgo.com/lite/', headers=headers, data=data, timeout=15)
+            
+            if response.status_code == 403:
+                return "Pesan Sistem: Mesin pencari memblokir IP server Anda karena deteksi Bot."
+                
             soup = BeautifulSoup(response.text, 'html.parser')
             results = []
+            
             for tr in soup.find_all('tr'):
                 td = tr.find('td', class_='result-snippet')
                 if td: results.append(td.text.strip())
             
-            if not results: return f"Pesan Sistem: Tidak menemukan berita atau info mengenai '{query}' di internet."
-            return "Berikut ringkasan hasil pencarian web:\n" + "\n".join(results[:4])
+            if not results: 
+                return f"Pesan Sistem: Tidak menemukan berita atau info mengenai '{query}' di internet."
+                
+            return "Berikut ringkasan hasil pencarian web:\n" + "\n".join(results[:5])
         except Exception as e:
             return f"Gagal mencari di web: {str(e)}"
 
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
         try:
-            # Ekstrak ID Video
             video_id = None
             if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
             elif "youtu.be/" in video_url: video_id = video_url.split("youtu.be/")[1].split("?")[0]
             
             if not video_id: return "Pesan Sistem: URL YouTube tidak valid."
             
-            # Request transkrip via endpoint publik/proxy ringan
             r = requests.get(f"https://youtubetranscript.com/?server_vid2={video_id}", timeout=10)
             if r.status_code == 200:
                 soup = BeautifulSoup(r.text, 'xml')
@@ -507,13 +534,11 @@ class AgentTools:
     @staticmethod
     def eksekusi_python(kode: str) -> str:
         try:
-            # Tangkap output print dari skrip
             import sys
             old_stdout = sys.stdout
             redirected_output = io.StringIO()
             sys.stdout = redirected_output
             
-            # Ruang sandbox eksekusi
             local_scope = {}
             exec(kode, {}, local_scope)
             
@@ -689,6 +714,7 @@ def main():
             st.session_state.del_cookie = True 
             st.rerun()
 
+    # RENDER OBROLAN
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] in ["system", "tool"]: continue
         
