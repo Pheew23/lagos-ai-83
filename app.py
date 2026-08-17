@@ -374,13 +374,36 @@ class MarketUtils:
 def inject_custom_css():
     st.markdown("""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
             html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
             #MainMenu {visibility: hidden;} footer {visibility: hidden;}
             .header-title { text-align: center; font-size: 2.2rem; font-weight: 700; background: linear-gradient(90deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0px; padding-top: 10px; }
             .header-subtitle { text-align: center; color: var(--text-color); opacity: 0.7; font-size: 0.95rem; font-weight: 300; margin-bottom: 30px; }
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
+            
+            /* -- KUSTOMISASI TAMPILAN SIDEBAR (GAYA GEMINI) -- */
+            section[data-testid="stSidebar"] .stButton button {
+                border: none !important;
+                background-color: transparent !important;
+                color: var(--text-color) !important;
+                justify-content: flex-start !important;
+                text-align: left !important;
+                padding: 0.4rem 0.6rem !important;
+                border-radius: 10px !important;
+                font-size: 0.85rem !important;
+                font-weight: 500 !important;
+                box-shadow: none !important;
+            }
+            section[data-testid="stSidebar"] .stButton button:hover {
+                background-color: var(--secondary-background-color) !important;
+            }
+            /* Warna khusus untuk riwayat chat yang aktif */
+            section[data-testid="stSidebar"] .stButton button[kind="primary"] {
+                background-color: rgba(125, 78, 255, 0.15) !important;
+                color: #7d4eff !important;
+                font-weight: 600 !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -470,57 +493,79 @@ def main():
     st.markdown('<div class="header-title">🔮 Lagøs AI 9.1</div>', unsafe_allow_html=True)
     st.markdown('<div class="header-subtitle">Assistant AI</div>', unsafe_allow_html=True)
 
+    # ==========================================
+    # MODIFIKASI SIDEBAR GAYA GEMINI
+    # ==========================================
     with st.sidebar:
-        st.success(f"👤 Login sebagai: **{st.session_state.username}**")
-        st.divider()
-        if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
+        # Header Aplikasi di Sidebar
+        st.markdown("<h2 style='margin-top: -20px; font-size: 1.4rem; display: flex; align-items: center; gap: 10px;'>✨ Lagøs AI 9.1</h2>", unsafe_allow_html=True)
+        
+        # Tombol Percakapan Baru
+        if st.button("📝 Percakapan baru", use_container_width=True):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             st.session_state.tahap2_pending = False
             st.session_state.trigger_tahap2 = False
             st.rerun()
 
-        st.markdown("### 🗂️ Riwayat Obrolan")
+        st.markdown("<p style='font-size: 0.8rem; color: #888; margin-top: 20px; margin-bottom: 5px; font-weight: 600;'>Terbaru</p>", unsafe_allow_html=True)
+        
+        # Daftar Riwayat Obrolan
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
         if sessions:
-            with st.container(height=300, border=False):
+            with st.container(height=350, border=False):
                 for sess_id, title in sessions:
-                    col_btn, col_del = st.columns([6, 1], gap="small") 
+                    col_btn, col_del = st.columns([7, 1], gap="small") 
                     with col_btn:
                         btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
+                        # Potong judul agar rapi jika kepanjangan
+                        display_title = title[:28] + "..." if len(title) > 28 else title
+                        if st.button(display_title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                             st.session_state.tahap2_pending = False
                             st.session_state.trigger_tahap2 = False
                             st.rerun()
                     with col_del:
-                        if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
+                        if st.button("✕", key=f"del_{sess_id}", help="Hapus obrolan", type="secondary"):
                             DatabaseManager.delete_session(sess_id)
                             if st.session_state.current_session_id == sess_id:
                                 st.session_state.current_session_id = None
                                 st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
                             st.rerun()
 
+        # Pemisah & Pengaturan Bawah
+        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         st.divider()
-        st.markdown("### 🧠 Pilih Model AI")
+        st.markdown("<p style='font-size: 0.8rem; color: #888; margin-bottom: 5px; font-weight: 600;'>Pengaturan</p>", unsafe_allow_html=True)
+        
         selected_model = st.selectbox("Pilih model aktif:", list(MODEL_MAPPING.keys()), format_func=lambda x: MODEL_MAPPING[x], label_visibility="collapsed")
         
         if len(st.session_state.messages) > 1:
-            st.download_button("📥 Unduh Laporan Chat", data=MediaUtils.buat_file_word(st.session_state.messages), file_name="Lagøs_AI_Chat.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+            st.download_button("📥 Unduh Laporan", data=MediaUtils.buat_file_word(st.session_state.messages), file_name="Lagøs_AI_Chat.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-        st.divider()
-        if st.button("🚪 Keluar (Logout)", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            st.session_state.tahap2_pending = False
-            st.session_state.trigger_tahap2 = False
-            st.session_state.del_cookie = True 
-            st.rerun()
+        st.write("") 
+        
+        # Area Profil Pengguna & Tombol Keluar di Bawah
+        col_img, col_info, col_logout = st.columns([1.5, 5, 1.5])
+        with col_img:
+            st.markdown("<div style='width: 32px; height: 32px; border-radius: 50%; background-color: #7d4eff; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;'>👤</div>", unsafe_allow_html=True)
+        with col_info:
+            st.markdown(f"<div style='font-size: 0.85rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 2px;'>{st.session_state.username}</div><div style='font-size: 0.75rem; color: #888;'>Pro</div>", unsafe_allow_html=True)
+        with col_logout:
+            if st.button("⚙️", help="Keluar / Logout", key="logout_btn", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.username = ""
+                st.session_state.current_session_id = None
+                st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                st.session_state.tahap2_pending = False
+                st.session_state.trigger_tahap2 = False
+                st.session_state.del_cookie = True 
+                st.rerun()
 
-    # RENDER OBROLAN
+    # ==========================================
+    # RENDER OBROLAN UTAMA
+    # ==========================================
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] == "system": continue
         with st.chat_message(message["role"]):
