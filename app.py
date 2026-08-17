@@ -8,7 +8,7 @@ import sqlite3
 import hashlib
 import datetime
 import copy
-import time  # <-- Tambahan library untuk memberi jeda/napas pada Agent
+import time
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
@@ -78,7 +78,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "baca_isi_website",
-            "description": "Gunakan alat ini untuk membaca artikel atau konten dari URL/link spesifik.",
+            "description": "Gunakan alat ini untuk membaca artikel, tabel, atau konten dari URL/link spesifik.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -135,10 +135,13 @@ LAGOS_TOOLS = [
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, Agen AI analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
 
 ATURAN KETAT UNTUK MERESPONS UMUM:
-1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI ditanya secara spesifik tentang identitas Anda.
+1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI ditanya spesifik.
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi.
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
+
+ATURAN ANTI-HALUSINASI (SANGAT PENTING):
+Jika Anda menggunakan alat (seperti membaca website, mencari di web, atau cek pasar) dan informasi yang dicari pengguna TIDAK ADA di dalam data yang dikembalikan oleh alat tersebut, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG, MENEBAK, ATAU MEMBUAT-BUAT DATA PALSU!
 
 ATURAN KONFIRMASI FORMAT OUTPUT:
 Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
@@ -265,7 +268,6 @@ class DatabaseManager:
             c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
             conn.commit()
 
-# Caching Database Init agar tidak diulang-ulang (Optimasi Loading)
 @st.cache_resource(show_spinner=False)
 def setup_database():
     DatabaseManager.init_db()
@@ -296,7 +298,7 @@ class MediaUtils:
             elif nama_file.endswith('.txt'):
                 teks_hasil = uploaded_file.read().decode("utf-8")
             elif nama_file.endswith('.docx'):
-                from docx import Document  # Lazy Loading
+                from docx import Document  
                 doc = Document(uploaded_file)
                 for para in doc.paragraphs: teks_hasil += para.text + "\n"
             return teks_hasil.strip()
@@ -305,7 +307,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_file_word(riwayat_pesan: List[Dict[str, Any]]) -> io.BytesIO:
-        from docx import Document # Lazy Loading
+        from docx import Document 
         doc = Document()
         doc.add_heading('Lagøs AI Agent - Analisis Laporan', 0)
         for msg in riwayat_pesan:
@@ -338,7 +340,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_dokumen_docx(konten: str) -> io.BytesIO:
-        from docx import Document # Lazy Loading
+        from docx import Document 
         doc = Document()
         for line in konten.split('\n'):
             line = line.strip()
@@ -356,7 +358,7 @@ class MediaUtils:
     @staticmethod
     def buat_dokumen_pdf(konten: str) -> io.BytesIO:
         try:
-            from fpdf import FPDF # Lazy Loading
+            from fpdf import FPDF 
         except ImportError:
             raise ImportError("Fitur PDF diblokir karena library fpdf2 belum diinstal.")
             
@@ -403,8 +405,8 @@ class MediaUtils:
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
-            from bs4 import BeautifulSoup # Lazy loading
-            # Jika tidak ada http/https, tambahkan otomatis
+            from bs4 import BeautifulSoup 
+            
             if not url.startswith('http'):
                 url = 'https://' + url
                 
@@ -421,12 +423,18 @@ class MediaUtils:
                 
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
-            text = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'article'])])
             
-            if not text.strip():
+            # PENTING: Hapus tag yang tidak diperlukan agar AI fokus ke data
+            for element in soup(['script', 'style', 'nav', 'footer', 'header', 'noscript']):
+                element.extract()
+                
+            # Mengekstrak seluruh teks, ini akan menangkap isi <table>, <li>, dan <div> yang sering dipakai untuk data guru/pegawai
+            text = soup.get_text(separator=' | ', strip=True)
+            
+            if not text:
                 return "Pesan Sistem: Berhasil membuka web, tetapi konten kosong. Kemungkinan web ini menggunakan JavaScript penuh."
                 
-            return re.sub(r'\s+', ' ', text).strip()
+            return text[:15000] # Batasi panjang karakter agar tidak overload memori
         except Exception as e: 
             return f"Error Link: {str(e)}"
 
@@ -447,7 +455,7 @@ class MediaUtils:
 
     @staticmethod
     def buat_file_ppt(data_json: dict) -> io.BytesIO:
-        from pptx import Presentation # Lazy Loading
+        from pptx import Presentation 
         tema_pilihan = data_json.get("rekomendasi_tema", "bisnis").lower()
         peta = {"bisnis": "tema_bisnis.pptx", "kreatif": "tema_kreatif.pptx", "akademik": "tema_akademik.pptx", "gelap": "tema_gelap.pptx"}
         file_template = peta.get(tema_pilihan, "tema_bisnis.pptx")
@@ -483,7 +491,7 @@ class MediaUtils:
 class MarketUtils:
     @staticmethod
     def ambil_data_pasar(simbol_ticker: str) -> str:
-        import yfinance as yf # Lazy Loading
+        import yfinance as yf 
         try:
             if not simbol_ticker.endswith("-USD") and len(simbol_ticker) <= 5:
                 if simbol_ticker.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']:
@@ -498,7 +506,7 @@ class MarketUtils:
 class AgentTools:
     @staticmethod
     def cari_informasi_web(query: str) -> str:
-        from bs4 import BeautifulSoup # Lazy loading
+        from bs4 import BeautifulSoup 
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -531,7 +539,7 @@ class AgentTools:
 
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
-        from bs4 import BeautifulSoup # Lazy loading
+        from bs4 import BeautifulSoup 
         try:
             video_id = None
             if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
@@ -811,7 +819,7 @@ def main():
     if audio_bytes and not prompt_text:
         with st.spinner("Menerjemahkan suara..."):
             try: 
-                import speech_recognition as sr # Lazy loading
+                import speech_recognition as sr 
                 prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
             except: st.warning("Suara tidak terdengar jelas.")
 
@@ -835,14 +843,12 @@ def main():
                 teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
                 if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
 
-            # Ambil URL tambahan jika ada (Fallback manual)
             urls_found = re.compile(r'https?://\S+').findall(prompt)
-            # Jika user tidak memasukkan 'http', tapi format web umum (seperti sekolah.sch.id), tangkap juga
             urls_tambahan = re.compile(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s]*)?\b').findall(prompt)
             semua_url = list(set(urls_found + urls_tambahan))
             
             for url in semua_url:
-                teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)[:4000]}\n"
+                teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
 
             final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
@@ -902,7 +908,7 @@ def main():
                             elif func_name == "baca_isi_website":
                                 url = func_args.get("url", "")
                                 st.info(f"🌐 Agent membaca situs web: {url}...")
-                                hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)[:4000]
+                                hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
                                 
                             elif func_name == "ambil_transkrip_youtube":
                                 yt_url = func_args.get("video_url", "")
@@ -926,7 +932,6 @@ def main():
                                 "content": str(hasil_fungsi),
                             })
                             
-                        # Mencegah Rate Limit 429 dari NVIDIA (Menambahkan JEDA)
                         time.sleep(2.5) 
                         
                 except Exception as e:
@@ -1023,7 +1028,7 @@ def main():
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg:
-                    st.error("⏳ Error 429 (Too Many Requests): Server API NVIDIA sedang membatasi kecepatan permintaan Anda. Silakan tunggu sekitar 10-20 detik lalu coba lagi. Anda juga bisa mencoba ganti Model AI di menu samping.")
+                    st.error("⏳ Error 429 (Too Many Requests): Server API NVIDIA sedang membatasi kecepatan permintaan Anda. Silakan tunggu sekitar 10-20 detik lalu coba lagi.")
                 elif "404" in error_msg:
                     st.error("❌ Kesalahan 404: Model AI yang Anda pilih sedang tidak tersedia/down di server NVIDIA, atau limit teks terlalu besar.")
                 else:
