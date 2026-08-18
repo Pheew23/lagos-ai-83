@@ -43,18 +43,18 @@ MODEL_MAPPING = {
 }
 
 # ==========================================
-# FUNGSI AUTO-RETRY ANTI ERROR 429
+# FUNGSI AUTO-RETRY ANTI ERROR 429 (Setelan 40 RPM)
 # ==========================================
 def panggil_api_dengan_retry(client_instance, **kwargs):
-    max_retries = 3
+    max_retries = 4  
     for attempt in range(max_retries):
         try:
             return client_instance.chat.completions.create(**kwargs)
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg and attempt < max_retries - 1:
-                jeda = (attempt + 1) * 6  
-                st.toast(f"⏳ Server API sibuk. Otomatis mencoba ulang dalam {jeda} detik... ({attempt+1}/{max_retries})")
+                jeda = 3 + (attempt * 3)  
+                st.toast(f"⏳ Menyesuaikan limit 40 RPM. Melanjutkan dalam {jeda} detik... ({attempt+1}/{max_retries})")
                 time.sleep(jeda)
             else:
                 raise e
@@ -102,6 +102,20 @@ LAGOS_TOOLS = [
                     "url": {"type": "string", "description": "URL website (dimulai http/https)."}
                 },
                 "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cari_gambar",
+            "description": "Gunakan alat ini untuk mencari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya (contoh: 'Menara Eiffel', 'Joko Widodo')."}
+                },
+                "required": ["query"]
             }
         }
     },
@@ -157,15 +171,21 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 
-ATURAN ANTI-HALUSINASI (SANGAT PENTING):
-Jika Anda menggunakan alat (seperti membaca website, mencari di web, atau cek pasar) dan informasi yang dicari pengguna TIDAK ADA di dalam data yang dikembalikan oleh alat tersebut, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG, MENEBAK, ATAU MEMBUAT-BUAT DATA PALSU!
+ATURAN MENAMPILKAN GAMBAR/FOTO:
+1. FOTO ASLI: Jika pengguna meminta foto tokoh, tempat, atau benda nyata, gunakan alat `cari_gambar`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
+2. ILUSTRASI/GAMBAR BUATAN: Jika pengguna meminta DIBUATKAN ilustrasi, lukisan, atau gambar imajinasi/fiksi, JANGAN gunakan alat! Langsung render Markdown berikut:
+`![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail_yang_panjang?width=800&height=600&nologo=true)`
+(Ganti semua spasi pada deskripsi bahasa inggris tersebut dengan %%20).
+
+ATURAN ANTI-HALUSINASI:
+Jika Anda menggunakan alat (seperti membaca website, mencari di web) dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG ATAU MEMBUAT-BUAT DATA PALSU!
 
 ATURAN KONFIRMASI FORMAT OUTPUT:
 Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
 
 ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
-Jika pengguna meminta membuat PPT atau slide dari teks/dokumen terlampir, Anda HARUS bertindak sebagai Art Director. Analisis teks materi dan pilih tema: "bisnis", "kreatif", "akademik", atau "gelap".
-Rangkum materi menjadi slide dan kembalikan MURNI dalam blok JSON:
+Jika pengguna meminta membuat PPT atau slide, Anda HARUS bertindak sebagai Art Director. Analisis teks materi dan pilih tema: "bisnis", "kreatif", "akademik", atau "gelap".
+Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
 %sjson
 {
   "judul_presentasi": "Judul Utama PPT",
@@ -186,7 +206,7 @@ Rangkum materi menjadi slide dan kembalikan MURNI dalam blok JSON:
 %s
 
 ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Perhatikan baik-baik instruksi sistem mengenai SAKLAR MODE. Jika mode aplikasi AKTIF, Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
+Jika mode aplikasi AKTIF, Anda WAJIB menulis SELURUH kode aplikasi (HTML, CSS, dan JavaScript) di dalam SATU file/blok kode HTML lengkap. JANGAN dipisah-pisah. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
 Jika diminta membuat dokumen/artikel/laporan (Word/PDF), rangkum kontennya MURNI di dalam blok kode `document`.
@@ -513,7 +533,7 @@ class MarketUtils:
                     simbol_ticker = f"{simbol_ticker.upper()}-USD"
             ticker = yf.Ticker(simbol_ticker)
             hist = ticker.history(period="5d")
-            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan."
+            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan. Mohon beritahu pengguna."
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e: return f"Gagal mengambil data dari API: {str(e)}"
@@ -551,6 +571,31 @@ class AgentTools:
             return "Berikut ringkasan hasil pencarian web:\n" + "\n".join(results[:5])
         except Exception as e:
             return f"Gagal mencari di web: {str(e)}"
+
+    @staticmethod
+    def cari_gambar(query: str) -> str:
+        try:
+            search_url = f"https://id.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
+            search_res = requests.get(search_url, timeout=10).json()
+            wiki_lang = "id"
+            if not search_res[1]:
+                search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
+                search_res = requests.get(search_url, timeout=10).json()
+                wiki_lang = "en"
+                if not search_res[1]:
+                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}'."
+            
+            title = search_res[1][0]
+            img_url = f"https://{wiki_lang}.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles={title}"
+            img_res = requests.get(img_url, timeout=10).json()
+            pages = img_res.get("query", {}).get("pages", {})
+            for page_id, page_data in pages.items():
+                if "original" in page_data:
+                    url_gambar = page_data["original"]["source"]
+                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tolong segera balas pengguna dan tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
+            return f"Pesan Sistem: Artikel mengenai '{title}' ditemukan tetapi tidak ada foto yang relevan."
+        except Exception as e:
+            return f"Gagal mencari gambar: {str(e)}"
 
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
@@ -645,8 +690,7 @@ def init_session_state():
         "logged_in": False, "username": "", "current_session_id": None,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
         "temp_image": None, "temp_doc": None, "uploader_key": 0,
-        "tahap2_pending": False, "trigger_tahap2": False,
-        "token_usage": 0 # Variabel Penyimpan Token
+        "token_usage": 0 
     }
     for key, val in defaults.items():
         if key not in st.session_state: st.session_state[key] = val
@@ -713,9 +757,7 @@ def main():
         if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            st.session_state.tahap2_pending = False
-            st.session_state.trigger_tahap2 = False
-            st.session_state.token_usage = 0 # Reset Token
+            st.session_state.token_usage = 0 
             st.rerun()
 
         st.markdown("### 🗂️ Riwayat Obrolan")
@@ -729,9 +771,7 @@ def main():
                         if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
-                            st.session_state.tahap2_pending = False
-                            st.session_state.trigger_tahap2 = False
-                            st.session_state.token_usage = 0 # Reset Token untuk tampilan baru
+                            st.session_state.token_usage = 0 
                             st.rerun()
                     with col_del:
                         if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
@@ -745,7 +785,6 @@ def main():
         st.markdown("### 🧠 Pilih Model AI")
         selected_model = st.selectbox("Pilih model aktif:", list(MODEL_MAPPING.keys()), format_func=lambda x: MODEL_MAPPING[x], label_visibility="collapsed")
         
-        # PANEL STATISTIK TOKEN
         st.divider()
         st.markdown("### 📊 Statistik Sesi Ini")
         st.info(f"🪙 Est. Token Dipakai: **{st.session_state.token_usage:,}**")
@@ -759,8 +798,6 @@ def main():
             st.session_state.username = ""
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            st.session_state.tahap2_pending = False
-            st.session_state.trigger_tahap2 = False
             st.session_state.del_cookie = True 
             st.rerun()
 
@@ -781,11 +818,8 @@ def main():
             st.markdown(text_disp)
             
             if message["role"] == "assistant":
-                is_last_message = (idx == len(st.session_state.messages) - 1)
-                is_pending = is_last_message and st.session_state.get("tahap2_pending")
-                
                 html_code = MediaUtils.ekstrak_kode_html(text_disp)
-                if html_code and not is_pending:
+                if html_code:
                     st.write("") 
                     if st.button("🚀 Tampilkan Web App", key=f"btn_webapp_{idx}", use_container_width=True):
                         render_webapp_modal(html_code)
@@ -797,7 +831,7 @@ def main():
                     st.download_button("📊 Unduh Presentasi (.PPTX)", data=ppt_file, file_name=f"{json_ppt.get('judul_presentasi', 'Presentasi_Lagos')}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key=f"btn_ppt_{idx}", use_container_width=True, type="primary")
 
                 dokumen_teks = MediaUtils.ekstrak_dokumen(text_disp)
-                if dokumen_teks and not is_pending:
+                if dokumen_teks:
                     st.write("")
                     col_doc1, col_doc2 = st.columns(2)
                     with col_doc1:
@@ -814,13 +848,6 @@ def main():
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
-    if st.session_state.get("tahap2_pending"):
-        st.info("⚠️ **Tahap 1 (UI/CSS) Selesai.** Lanjutkan untuk merender JavaScript dan mencegah timeout server.")
-        if st.button("⚡ Lanjutkan ke Tahap 2", type="primary", use_container_width=True):
-            st.session_state.trigger_tahap2 = True
-            st.session_state.tahap2_pending = False
-            st.rerun()
-
     with st.container():
         app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML.")
         
@@ -834,7 +861,7 @@ def main():
                 st.session_state.temp_image = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed", key=f"img_{uploader_idx}")
                 st.session_state.temp_doc = st.file_uploader("Upload Doc", type=["pdf", "txt", "docx"], label_visibility="collapsed", key=f"doc_{uploader_idx}")
         with col_input:
-            prompt_text = st.chat_input("Tanyakan sesuatu..." if not st.session_state.get("tahap2_pending") else "Terkunci (Selesaikan Tahap 2)", disabled=st.session_state.get("tahap2_pending"))
+            prompt_text = st.chat_input("Tanyakan sesuatu...")
         with col_mic:
             audio_bytes = audio_recorder(text="", recording_color="#ff4b4b", neutral_color="#888888", icon_name="microphone", icon_size="1.8x", key=f"mic_{uploader_idx}")
 
@@ -846,45 +873,40 @@ def main():
                 prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
             except: st.warning("Suara tidak terdengar jelas.")
 
-    is_tahap2_exec = st.session_state.get("trigger_tahap2", False)
-
-    if prompt or is_tahap2_exec:
+    if prompt:
         client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
         
-        if is_tahap2_exec:
-            st.session_state.trigger_tahap2 = False 
+        with st.chat_message("user"): st.markdown(prompt)
+        teks_tambahan = ""
+        
+        if app_mode:
+            teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya. Gabungkan HTML, CSS, dan JS dalam SATU blok kode `html`.]\n"
         else:
-            with st.chat_message("user"): st.markdown(prompt)
-            teks_tambahan = ""
-            
-            if app_mode:
-                teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya.]\n"
-            else:
-                teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
-            
-            if st.session_state.temp_doc:
-                teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-                if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
+            teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
+        
+        if st.session_state.temp_doc:
+            teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
+            if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
 
-            urls_found = re.compile(r'https?://\S+').findall(prompt)
-            urls_tambahan = re.compile(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s]*)?\b').findall(prompt)
-            semua_url = list(set(urls_found + urls_tambahan))
-            
-            for url in semua_url:
-                teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
+        urls_found = re.compile(r'https?://\S+').findall(prompt)
+        urls_tambahan = re.compile(r'\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s]*)?\b').findall(prompt)
+        semua_url = list(set(urls_found + urls_tambahan))
+        
+        for url in semua_url:
+            teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
 
-            final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
+        final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
-            if st.session_state.temp_image:
-                base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
-                st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": final_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
-            else:
-                st.session_state.messages.append({"role": "user", "content": final_prompt})
+        if st.session_state.temp_image:
+            base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
+            st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": final_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
+        else:
+            st.session_state.messages.append({"role": "user", "content": final_prompt})
 
         # ====================================================
         # FASE 1: AGENT THOUGHT PROCESS (Pre-Check Tools)
         # ====================================================
-        if not is_tahap2_exec and selected_model != "google/veo-3.1-fast-generate-preview":
+        if selected_model != "google/veo-3.1-fast-generate-preview":
             with st.spinner("🤖 Agent sedang memikirkan strategi & memeriksa alat..."):
                 try:
                     payload_agent = copy.deepcopy(st.session_state.messages)
@@ -934,6 +956,11 @@ def main():
                                 st.info(f"🌐 Agent membaca situs web: {url}...")
                                 hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
                                 
+                            elif func_name == "cari_gambar":
+                                query_img = func_args.get("query", "")
+                                st.info(f"🖼️ Agent mencari foto asli: '{query_img}'...")
+                                hasil_fungsi = AgentTools.cari_gambar(query_img)
+                                
                             elif func_name == "ambil_transkrip_youtube":
                                 yt_url = func_args.get("video_url", "")
                                 st.info(f"🎬 Agent mengekstrak transkrip YouTube: {yt_url}...")
@@ -956,7 +983,8 @@ def main():
                                 "content": str(hasil_fungsi),
                             })
                             
-                        time.sleep(2.5) 
+                        # Jeda aman untuk memastikan tidak menabrak limit 40 RPM
+                        time.sleep(2.0) 
                         
                 except Exception as e:
                     pass
@@ -969,82 +997,23 @@ def main():
             full_response = ""
 
             try:
-                if is_tahap2_exec:
-                    st.info("⏳ Memproses Tahap 2 (Menggabungkan JavaScript)...")
-                    tahap2_msgs = copy.deepcopy(st.session_state.messages)
-                    tahap2_msgs.append({
-                        "role": "user",
-                        "content": "TAHAP 2: Lanjutkan pembuatan aplikasi. Berikan HANYA kode JavaScript-nya saja. Jangan ulangi HTML/CSS dari Tahap 1."
-                    })
-                    
-                    response_stream = panggil_api_dengan_retry(
-                        client, model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True
-                    )
-                    
-                    for chunk in response_stream:
-                        if chunk.choices and len(chunk.choices) > 0:
-                            delta = chunk.choices[0].delta.content
-                            if delta:
-                                full_response += delta
-                                placeholder.markdown("⏳ **Menyusun Tahap 2 (JavaScript)...**\n\n" + full_response + "▌")
-                                
-                    teks_tahap2 = full_response
-                    if teks_tahap2.count(B3) % 2 != 0: teks_tahap2 += f"\n{B3}"
-                    
-                    blok_kode2 = re.findall(r'`{3}[a-zA-Z]*\n(.*?)\n`{3}', teks_tahap2, re.DOTALL | re.IGNORECASE)
-                    kode_tahap2 = "\n".join(blok_kode2) if blok_kode2 else teks_tahap2.replace(B3, '')
-                    kode_tahap2 = kode_tahap2.strip()
-                    
-                    if kode_tahap2 and "<script" not in kode_tahap2.lower():
-                        kode_tahap2 = f"<script>\n{kode_tahap2}\n</script>"
+                payload_msgs = copy.deepcopy(st.session_state.messages)
 
-                    last_msg_content = st.session_state.messages[-1]["content"]
-                    teks_tahap1 = last_msg_content
-                    if teks_tahap1.count(B3) % 2 != 0: teks_tahap1 += f"\n{B3}"
-                        
-                    blok_kode1 = re.findall(r'`{3}html\n(.*?)\n`{3}', teks_tahap1, re.DOTALL | re.IGNORECASE)
-                    kode_tahap1 = blok_kode1[0] if blok_kode1 else teks_tahap1.replace(f'{B3}html', '').replace(B3, '')
-                    kode_tahap1 = kode_tahap1.strip()
-                    
-                    if re.search(r'</body>', kode_tahap1, re.IGNORECASE):
-                        gabungan_bersih = re.sub(r'</body>', lambda _: f'\n{kode_tahap2}\n</body>', kode_tahap1, flags=re.IGNORECASE)
-                    else:
-                        gabungan_bersih = kode_tahap1 + "\n\n" + kode_tahap2
-                        
-                    hasil_final = f"Berikut adalah aplikasi web lengkapnya:\n\n{B3}html\n{gabungan_bersih}\n{B3}"
-                    
-                    st.session_state.messages[-1]["content"] = hasil_final 
-                    placeholder.markdown(hasil_final)
-                    
-                else:
-                    is_web_app = app_mode and any(kata in prompt.lower() for kata in ["buat", "bikin", "aplikasi", "web", "html", "app"])
-                    payload_msgs = copy.deepcopy(st.session_state.messages)
-                    
-                    if is_web_app:
-                        st.info("⏳ Mode Web/App (Saklar ON): Memproses Tahap 1...")
-                        instruksi_tahap_1 = "\n\n[PENTING]: Kerjakan dalam 2 TAHAP. TAHAP 1: Buat struktur HTML & CSS saja (bisa tambahkan framework seperti Tailwind/Bootstrap). Tuliskan di dalam SATU blok " + B3 + "html. JANGAN tulis logika JavaScript."
-                        if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
-                        else: payload_msgs[-1]["content"] += instruksi_tahap_1
-
-                    response_stream = panggil_api_dengan_retry(
-                        client, model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True
-                    )
-                    
-                    for chunk in response_stream:
-                        if chunk.choices and len(chunk.choices) > 0:
-                            delta = chunk.choices[0].delta.content
-                            if delta:
-                                full_response += delta
-                                placeholder.markdown(full_response + "▌")
-                                
-                    placeholder.markdown(full_response)
-                    st.session_state.messages.append({"role": "assistant", "content": full_response})
-                    
-                    if is_web_app:
-                        st.session_state.tahap2_pending = True
+                response_stream = panggil_api_dengan_retry(
+                    client, model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True
+                )
+                
+                for chunk in response_stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            full_response += delta
+                            placeholder.markdown(full_response + "▌")
+                            
+                placeholder.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
 
                 # --- MENGHITUNG DAN MENYIMPAN TOTAL TOKEN YANG DIGUNAKAN ---
-                # Mengkalkulasi panjang keseluruhan memori yang baru saja dikirim ke dan diterima dari server API
                 st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
 
                 if st.session_state.current_session_id is None:
@@ -1052,10 +1021,9 @@ def main():
                 
                 DatabaseManager.save_session(st.session_state.current_session_id, st.session_state.username, MediaUtils.generate_title_from_messages(st.session_state.messages), st.session_state.messages)
 
-                if not is_tahap2_exec:
-                    st.session_state.temp_image = None
-                    st.session_state.temp_doc = None
-                    st.session_state.uploader_key += 1 
+                st.session_state.temp_image = None
+                st.session_state.temp_doc = None
+                st.session_state.uploader_key += 1 
                 
                 st.rerun()
 
