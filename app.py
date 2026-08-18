@@ -43,6 +43,24 @@ MODEL_MAPPING = {
 }
 
 # ==========================================
+# FUNGSI AUTO-RETRY ANTI ERROR 429
+# ==========================================
+def panggil_api_dengan_retry(client_instance, **kwargs):
+    """Mencegah aplikasi crash saat kena rate limit NVIDIA."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return client_instance.chat.completions.create(**kwargs)
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg and attempt < max_retries - 1:
+                jeda = (attempt + 1) * 6  # Tunggu 6 detik, lalu 12 detik
+                st.toast(f"⏳ Server API sibuk. Otomatis mencoba ulang dalam {jeda} detik... ({attempt+1}/{max_retries})")
+                time.sleep(jeda)
+            else:
+                raise e
+
+# ==========================================
 # DEFINISI KOTAK ALAT (TOOLS) AI AGENT
 # ==========================================
 LAGOS_TOOLS = [
@@ -85,20 +103,6 @@ LAGOS_TOOLS = [
                     "url": {"type": "string", "description": "URL website (dimulai http/https)."}
                 },
                 "required": ["url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "cari_gambar",
-            "description": "Gunakan alat ini untuk mencari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya (contoh: 'Menara Eiffel', 'Joko Widodo', 'Kucing')."}
-                },
-                "required": ["query"]
             }
         }
     },
@@ -154,20 +158,14 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 
-ATURAN MENAMPILKAN GAMBAR/FOTO:
-1. FOTO ASLI: Jika pengguna meminta foto tokoh, tempat, atau benda nyata, gunakan alat `cari_gambar`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
-2. ILUSTRASI/GAMBAR BUATAN: Jika pengguna meminta DIBUATKAN ilustrasi, lukisan, atau gambar imajinasi/fiksi, JANGAN gunakan alat! Langsung render Markdown berikut:
-`![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail_yang_panjang?width=800&height=600&nologo=true)`
-(Ganti semua spasi pada deskripsi bahasa inggris tersebut dengan %%20).
-
-ATURAN ANTI-HALUSINASI:
-Jika Anda menggunakan alat (seperti membaca website, mencari di web, atau cek pasar) dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG ATAU MEMBUAT-BUAT DATA PALSU!
+ATURAN ANTI-HALUSINASI (SANGAT PENTING):
+Jika Anda menggunakan alat (seperti membaca website, mencari di web, atau cek pasar) dan informasi yang dicari pengguna TIDAK ADA di dalam data yang dikembalikan oleh alat tersebut, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG, MENEBAK, ATAU MEMBUAT-BUAT DATA PALSU!
 
 ATURAN KONFIRMASI FORMAT OUTPUT:
 Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
 
 ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
-Jika pengguna meminta membuat PPT atau slide, Anda HARUS bertindak sebagai Art Director. Analisis teks materi dan pilih tema: "bisnis", "kreatif", "akademik", atau "gelap".
+Jika pengguna meminta membuat PPT atau slide dari teks/dokumen terlampir, Anda HARUS bertindak sebagai Art Director. Analisis teks materi dan pilih tema: "bisnis", "kreatif", "akademik", atau "gelap".
 Rangkum materi menjadi slide dan kembalikan MURNI dalam blok JSON:
 %sjson
 {
@@ -189,7 +187,7 @@ Rangkum materi menjadi slide dan kembalikan MURNI dalam blok JSON:
 %s
 
 ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Jika mode aplikasi AKTIF, Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
+Perhatikan baik-baik instruksi sistem mengenai SAKLAR MODE. Jika mode aplikasi AKTIF, Anda boleh menulis kode aplikasi dalam SATU file HTML lengkap. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
 Jika diminta membuat dokumen/artikel/laporan (Word/PDF), rangkum kontennya MURNI di dalam blok kode `document`.
@@ -556,31 +554,6 @@ class AgentTools:
             return f"Gagal mencari di web: {str(e)}"
 
     @staticmethod
-    def cari_gambar(query: str) -> str:
-        try:
-            search_url = f"https://id.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
-            search_res = requests.get(search_url, timeout=10).json()
-            wiki_lang = "id"
-            if not search_res[1]:
-                search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
-                search_res = requests.get(search_url, timeout=10).json()
-                wiki_lang = "en"
-                if not search_res[1]:
-                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}'."
-            
-            title = search_res[1][0]
-            img_url = f"https://{wiki_lang}.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles={title}"
-            img_res = requests.get(img_url, timeout=10).json()
-            pages = img_res.get("query", {}).get("pages", {})
-            for page_id, page_data in pages.items():
-                if "original" in page_data:
-                    url_gambar = page_data["original"]["source"]
-                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tolong segera balas pengguna dan tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
-            return f"Pesan Sistem: Artikel mengenai '{title}' ditemukan tetapi tidak ada foto yang relevan."
-        except Exception as e:
-            return f"Gagal mencari gambar: {str(e)}"
-
-    @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
         from bs4 import BeautifulSoup 
         try:
@@ -908,7 +881,8 @@ def main():
             with st.spinner("🤖 Agent sedang memikirkan strategi & memeriksa alat..."):
                 try:
                     payload_agent = copy.deepcopy(st.session_state.messages)
-                    agent_response = client.chat.completions.create(
+                    agent_response = panggil_api_dengan_retry(
+                        client,
                         model=selected_model,
                         messages=payload_agent,
                         tools=LAGOS_TOOLS,
@@ -953,11 +927,6 @@ def main():
                                 st.info(f"🌐 Agent membaca situs web: {url}...")
                                 hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
                                 
-                            elif func_name == "cari_gambar":
-                                query_img = func_args.get("query", "")
-                                st.info(f"🖼️ Agent mencari foto asli: '{query_img}'...")
-                                hasil_fungsi = AgentTools.cari_gambar(query_img)
-                                
                             elif func_name == "ambil_transkrip_youtube":
                                 yt_url = func_args.get("video_url", "")
                                 st.info(f"🎬 Agent mengekstrak transkrip YouTube: {yt_url}...")
@@ -979,9 +948,6 @@ def main():
                                 "name": func_name,
                                 "content": str(hasil_fungsi),
                             })
-                            
-                        time.sleep(2.5) 
-                        
                 except Exception as e:
                     pass
 
@@ -1001,7 +967,10 @@ def main():
                         "content": "TAHAP 2: Lanjutkan pembuatan aplikasi. Berikan HANYA kode JavaScript-nya saja. Jangan ulangi HTML/CSS dari Tahap 1."
                     })
                     
-                    response_stream = client.chat.completions.create(model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True)
+                    response_stream = panggil_api_dengan_retry(
+                        client, model=selected_model, messages=tahap2_msgs, temperature=0.7, max_tokens=4000, stream=True
+                    )
+                    
                     for chunk in response_stream:
                         if chunk.choices and len(chunk.choices) > 0:
                             delta = chunk.choices[0].delta.content
@@ -1047,7 +1016,10 @@ def main():
                         if isinstance(payload_msgs[-1]["content"], list): payload_msgs[-1]["content"][0]["text"] += instruksi_tahap_1
                         else: payload_msgs[-1]["content"] += instruksi_tahap_1
 
-                    response_stream = client.chat.completions.create(model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True)
+                    response_stream = panggil_api_dengan_retry(
+                        client, model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True
+                    )
+                    
                     for chunk in response_stream:
                         if chunk.choices and len(chunk.choices) > 0:
                             delta = chunk.choices[0].delta.content
@@ -1075,10 +1047,11 @@ def main():
 
             except Exception as e:
                 error_msg = str(e)
+                # Notifikasi error yang lebih spesifik jika terjadi crash akhir
                 if "429" in error_msg:
-                    st.error("⏳ Error 429 (Too Many Requests): Server API NVIDIA sedang membatasi kecepatan permintaan Anda. Silakan tunggu sekitar 10-20 detik lalu coba lagi.")
+                    st.error("⏳ API sedang mencapai batas maksimal dari NVIDIA. Silakan tunggu beberapa saat lagi.")
                 elif "404" in error_msg:
-                    st.error("❌ Kesalahan 404: Model AI yang Anda pilih sedang tidak tersedia/down di server NVIDIA, atau limit teks terlalu besar.")
+                    st.error("❌ Kesalahan 404: Model AI sedang tidak tersedia dari server.")
                 else:
                     st.error(f"Kesalahan teknis: {error_msg}")
                     
