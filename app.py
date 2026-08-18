@@ -46,7 +46,6 @@ MODEL_MAPPING = {
 # FUNGSI AUTO-RETRY ANTI ERROR 429
 # ==========================================
 def panggil_api_dengan_retry(client_instance, **kwargs):
-    """Mencegah aplikasi crash saat kena rate limit NVIDIA."""
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -54,7 +53,7 @@ def panggil_api_dengan_retry(client_instance, **kwargs):
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg and attempt < max_retries - 1:
-                jeda = (attempt + 1) * 6  # Tunggu 6 detik, lalu 12 detik
+                jeda = (attempt + 1) * 6  
                 st.toast(f"⏳ Server API sibuk. Otomatis mencoba ulang dalam {jeda} detik... ({attempt+1}/{max_retries})")
                 time.sleep(jeda)
             else:
@@ -514,7 +513,7 @@ class MarketUtils:
                     simbol_ticker = f"{simbol_ticker.upper()}-USD"
             ticker = yf.Ticker(simbol_ticker)
             hist = ticker.history(period="5d")
-            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan. Mohon beritahu pengguna."
+            if hist.empty: return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan."
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e: return f"Gagal mengambil data dari API: {str(e)}"
@@ -646,7 +645,8 @@ def init_session_state():
         "logged_in": False, "username": "", "current_session_id": None,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
         "temp_image": None, "temp_doc": None, "uploader_key": 0,
-        "tahap2_pending": False, "trigger_tahap2": False
+        "tahap2_pending": False, "trigger_tahap2": False,
+        "token_usage": 0 # Variabel Penyimpan Token
     }
     for key, val in defaults.items():
         if key not in st.session_state: st.session_state[key] = val
@@ -715,6 +715,7 @@ def main():
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             st.session_state.tahap2_pending = False
             st.session_state.trigger_tahap2 = False
+            st.session_state.token_usage = 0 # Reset Token
             st.rerun()
 
         st.markdown("### 🗂️ Riwayat Obrolan")
@@ -730,6 +731,7 @@ def main():
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                             st.session_state.tahap2_pending = False
                             st.session_state.trigger_tahap2 = False
+                            st.session_state.token_usage = 0 # Reset Token untuk tampilan baru
                             st.rerun()
                     with col_del:
                         if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
@@ -742,6 +744,11 @@ def main():
         st.divider()
         st.markdown("### 🧠 Pilih Model AI")
         selected_model = st.selectbox("Pilih model aktif:", list(MODEL_MAPPING.keys()), format_func=lambda x: MODEL_MAPPING[x], label_visibility="collapsed")
+        
+        # PANEL STATISTIK TOKEN
+        st.divider()
+        st.markdown("### 📊 Statistik Sesi Ini")
+        st.info(f"🪙 Est. Token Dipakai: **{st.session_state.token_usage:,}**")
         
         if len(st.session_state.messages) > 1:
             st.download_button("📥 Unduh Laporan Chat", data=MediaUtils.buat_file_word(st.session_state.messages), file_name="Lagøs_AI_Chat.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
@@ -948,6 +955,9 @@ def main():
                                 "name": func_name,
                                 "content": str(hasil_fungsi),
                             })
+                            
+                        time.sleep(2.5) 
+                        
                 except Exception as e:
                     pass
 
@@ -1033,6 +1043,10 @@ def main():
                     if is_web_app:
                         st.session_state.tahap2_pending = True
 
+                # --- MENGHITUNG DAN MENYIMPAN TOTAL TOKEN YANG DIGUNAKAN ---
+                # Mengkalkulasi panjang keseluruhan memori yang baru saja dikirim ke dan diterima dari server API
+                st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
+
                 if st.session_state.current_session_id is None:
                     st.session_state.current_session_id = str(uuid.uuid4())
                 
@@ -1047,7 +1061,6 @@ def main():
 
             except Exception as e:
                 error_msg = str(e)
-                # Notifikasi error yang lebih spesifik jika terjadi crash akhir
                 if "429" in error_msg:
                     st.error("⏳ API sedang mencapai batas maksimal dari NVIDIA. Silakan tunggu beberapa saat lagi.")
                 elif "404" in error_msg:
