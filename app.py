@@ -571,13 +571,6 @@ class MediaUtils:
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
                 
-                # --- BERSIHKAN INSTRUKSI BACKEND DARI JUDUL ---
-                if "Pertanyaan/Instruksi Pengguna:\n" in text:
-                    text = text.split("Pertanyaan/Instruksi Pengguna:\n")[-1]
-                else:
-                    text = text.split("[AKHIR KONTEN]\n\n")[-1]
-                    text = text.split("[AKHIR DOKUMEN]\n\n")[-1]
-                
                 text = text.strip()
                 return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
@@ -602,6 +595,8 @@ class MediaUtils:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
+            # --- EKSTRAKSI GAMBAR DIPERBARUI ---
+            # Menambah tangkapan untuk lazy loading dan fallback nama file
             daftar_gambar = []
             for img in soup.find_all('img'):
                 src = img.get('src') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-original')
@@ -626,6 +621,7 @@ class MediaUtils:
             hasil_akhir = text[:12000]
             
             if daftar_gambar:
+                # Limit gambar dinaikkan menjadi 50
                 hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:50])
                 
             return hasil_akhir
@@ -710,12 +706,26 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
-            /* Memperbaiki tampilan tombol riwayat obrolan di sidebar */
-            .stButton>button {
-                text-align: left;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+            /* CSS yang diperkuat untuk memaksa teks tombol sidebar terpotong dengan ellipsis (...) */
+            .stButton > button {
+                display: block;
+                width: 100%;
+                text-align: left !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+            .stButton > button > div {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                display: block;
+            }
+            .stButton > button p {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                margin: 0;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -823,7 +833,7 @@ def main():
                     col_btn, col_del = st.columns([6, 1], gap="small") 
                     with col_btn:
                         btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type):
+                        if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=title):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                             st.session_state.token_usage = 0 
@@ -870,14 +880,6 @@ def main():
             if not content: continue
             
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-            
-            # --- BERSIHKAN INSTRUKSI BACKEND DARI LAYAR CHAT USER ---
-            if message["role"] == "user":
-                if "Pertanyaan/Instruksi Pengguna:\n" in text_disp:
-                    split_text = text_disp.split("Pertanyaan/Instruksi Pengguna:\n")
-                    if len(split_text) > 1:
-                        text_disp = split_text[-1]
-            # --------------------------------------------------------
             
             st.markdown(text_disp)
             
@@ -958,13 +960,20 @@ def main():
         for url in semua_url:
             teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
 
-        final_prompt = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
+        final_prompt_api = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
         if st.session_state.temp_image:
             base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
-            st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": final_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
+            st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
         else:
-            st.session_state.messages.append({"role": "user", "content": final_prompt})
+            st.session_state.messages.append({"role": "user", "content": prompt})
+
+        payload_khusus_api = copy.deepcopy(st.session_state.messages)
+        
+        if isinstance(payload_khusus_api[-1]["content"], list):
+             payload_khusus_api[-1]["content"][0]["text"] = final_prompt_api
+        else:
+             payload_khusus_api[-1]["content"] = final_prompt_api
 
         # ====================================================
         # FASE 1: AGENT THOUGHT PROCESS (Pre-Check Tools)
@@ -981,11 +990,10 @@ def main():
             if butuh_alat:
                 with st.spinner("🤖 Agent sedang memikirkan strategi & memeriksa alat..."):
                     try:
-                        payload_agent = copy.deepcopy(st.session_state.messages)
                         agent_response = panggil_api_dengan_retry(
                             client,
                             model=selected_model,
-                            messages=payload_agent,
+                            messages=payload_khusus_api,
                             tools=LAGOS_TOOLS,
                             tool_choice="auto",
                             max_tokens=1000
@@ -995,6 +1003,18 @@ def main():
                         
                         if response_message.tool_calls:
                             st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": tc.id,
+                                        "type": tc.type,
+                                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                                    } for tc in response_message.tool_calls
+                                ]
+                            })
+                            
+                            payload_khusus_api.append({
                                 "role": "assistant",
                                 "content": None,
                                 "tool_calls": [
@@ -1048,12 +1068,14 @@ def main():
                                     st.info(f"🧮 Agent menggunakan kalkulator: {eks}...")
                                     hasil_fungsi = AgentTools.hitung_matematika(eks)
                                     
-                                st.session_state.messages.append({
+                                tool_msg = {
                                     "tool_call_id": tool_call.id,
                                     "role": "tool",
                                     "name": func_name,
                                     "content": str(hasil_fungsi),
-                                })
+                                }
+                                st.session_state.messages.append(tool_msg)
+                                payload_khusus_api.append(tool_msg)
                                 
                             time.sleep(2.0) 
                             
@@ -1068,12 +1090,10 @@ def main():
             full_response = ""
 
             try:
-                payload_msgs = copy.deepcopy(st.session_state.messages)
-
                 response_stream = panggil_api_dengan_retry(
                     client, 
                     model=selected_model, 
-                    messages=payload_msgs, 
+                    messages=payload_khusus_api, 
                     temperature=0.7, 
                     max_tokens=4000, 
                     stream=True
