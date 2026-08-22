@@ -35,11 +35,11 @@ BASE_URL = "https://integrate.api.nvidia.com/v1"
 B3 = "`" * 3
 
 MODEL_MAPPING = {
-    "minimaxai/minimax-m3": "1. Flash (Pro)",
-    "google/diffusiongemma-26b-a4b-it": "2. Stable",
-    "thinkingmachines/inkling": "3. Pro(text only)",
-    "z-ai/glm-5.2": "4. Pro (Analisis)",
-    "openai/gpt-oss-120b": "5. limited",
+    "meta/muse-glimmer-30b": "1. Aether (Flash)",
+    "google/diffusiongemma-26b-a4b-it": "2. Verper (pro)",
+    "nvidia/nemotron-3.5-lightning-30b-a3b": "3. Numayr(Eksklusif)",
+    "thinkingmachines/inkling": "4. Nova (Unstable)",
+    "deepseek-ai/deepseek-v4-flash-0731": "5. Zeta (Under Construction)",
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
 }
 
