@@ -845,39 +845,43 @@ def main():
     with st.sidebar:
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
         st.divider()
-        if st.button("➕ Mulai Obrolan Baru", use_container_width=True, type="primary"):
-            st.session_state.current_session_id = None
-            st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            st.session_state.token_usage = 0 
-            st.rerun()
+        
+        # --- PERUBAHAN TATA LETAK TOMBOL CHAT BARU & HAPUS ---
+        col_new, col_del = st.columns(2, gap="small")
+        with col_new:
+            if st.button("➕ Chat Baru", use_container_width=True, type="primary"):
+                st.session_state.current_session_id = None
+                st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                st.session_state.token_usage = 0 
+                st.rerun()
+        with col_del:
+            if st.button("🗑️ Hapus Chat", use_container_width=True):
+                if st.session_state.current_session_id:
+                    DatabaseManager.delete_session(st.session_state.current_session_id)
+                    st.session_state.current_session_id = None
+                    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                    st.rerun()
+                else:
+                    st.toast("Pilih obrolan aktif terlebih dahulu untuk dihapus.")
 
-        st.markdown("### 🗂️ Riwayat Obrolan")
+        st.markdown("### 🗂️ Riwayat")
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
+        
         if sessions:
-            with st.container(height=400, border=False):
+            with st.container(height=450, border=False):
                 for sess_id, title in sessions:
-                    
-                    # --- MEMBERSIHKAN JUDUL KOTOR DARI DATABASE LAMA ---
+                    # Bersihkan sisa-sisa instruksi dari database lama
                     clean_title = re.sub(r'\[MODE.*?\]\n*', '', title)
                     clean_title = clean_title.replace("Pertanyaan/Instruksi Pengguna:\n", "").strip()
                     
-                    # Layout diperlebar agar judul memiliki ruang lebih besar
-                    col_btn, col_del = st.columns([6, 1], gap="small") 
-                    with col_btn:
-                        btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        # Menambahkan ikon chat 💬 di depan judul ala Gemini
-                        if st.button(f"💬 {clean_title}", key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
-                            st.session_state.current_session_id = sess_id
-                            st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
-                            st.session_state.token_usage = 0 
-                            st.rerun()
-                    with col_del:
-                        if st.button("🗑️", key=f"del_{sess_id}", help="Hapus obrolan ini"):
-                            DatabaseManager.delete_session(sess_id)
-                            if st.session_state.current_session_id == sess_id:
-                                st.session_state.current_session_id = None
-                                st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                            st.rerun()
+                    btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
+                    
+                    # Tampilkan judul chat sebagai tombol FULL WIDTH (tanpa tong sampah di sampingnya)
+                    if st.button(f"💬 {clean_title}", key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
+                        st.session_state.current_session_id = sess_id
+                        st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
+                        st.session_state.token_usage = 0 
+                        st.rerun()
 
         st.divider()
         st.markdown("### 🧠 Pilih Model AI")
