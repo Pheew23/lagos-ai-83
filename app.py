@@ -9,6 +9,7 @@ import hashlib
 import datetime
 import copy
 import time
+from urllib.parse import urljoin
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
 
@@ -34,11 +35,11 @@ BASE_URL = "https://integrate.api.nvidia.com/v1"
 B3 = "`" * 3
 
 MODEL_MAPPING = {
-    "meta/muse-glimmer-30b": "1. Aether (Flash)",
-    "google/diffusiongemma-26b-a4b-it": "2. Vesper (Pro)",
-    "minimaxai/minimax-m3": "3. Numayr (Eksklusif)",
-    "deepseek-ai/deepseek-v4-flash-0731": "4. Nova (Pengembang)",
-    "openai/gpt-oss-120b": "5. Zeta (unstable)",
+    "minimaxai/minimax-m3": "1. Flash (Pro)",
+    "google/diffusiongemma-26b-a4b-it": "2. Stable",
+    "thinkingmachines/inkling": "3. Pro(text only)",
+    "z-ai/glm-5.2": "4. Pro (Analisis)",
+    "openai/gpt-oss-120b": "5. limited",
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
 }
 
@@ -95,7 +96,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "baca_isi_website",
-            "description": "Gunakan alat ini untuk membaca artikel, tabel, atau konten dari URL/link spesifik.",
+            "description": "Gunakan alat ini untuk membaca artikel, tabel, dan tautan gambar dari URL/link spesifik.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -109,7 +110,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_gambar",
-            "description": "Gunakan alat ini untuk mencari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata.",
+            "description": "Gunakan alat ini untuk mencari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata dari Wikipedia.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -172,13 +173,13 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 4. Jangan Pernah membagikan informasi sensitif.
 
 ATURAN MENAMPILKAN GAMBAR/FOTO:
-1. FOTO ASLI: Jika pengguna meminta foto tokoh, tempat, atau benda nyata, gunakan alat `cari_gambar`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
+1. FOTO ASLI: Jika pengguna meminta foto tokoh/tempat, gunakan alat `cari_gambar` atau ekstrak dari `baca_isi_website`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
 2. ILUSTRASI/GAMBAR BUATAN: Jika pengguna meminta DIBUATKAN ilustrasi, lukisan, atau gambar imajinasi/fiksi, JANGAN gunakan alat! Langsung render Markdown berikut:
 `![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail_yang_panjang?width=800&height=600&nologo=true)`
-(Ganti semua spasi pada deskripsi bahasa inggris tersebut dengan %%20).
+(Ganti semua spasi pada deskripsi bahasa inggris tersebut dengan %20).
 
 ATURAN ANTI-HALUSINASI:
-Jika Anda menggunakan alat (seperti membaca website, mencari di web) dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan di dalam website/data tersebut". JANGAN PERNAH MENGARANG ATAU MEMBUAT-BUAT DATA PALSU!
+Jika Anda menggunakan alat dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan". JANGAN PERNAH MENGARANG DATA PALSU!
 
 ATURAN KONFIRMASI FORMAT OUTPUT:
 Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
@@ -209,7 +210,7 @@ ATURAN PEMBUATAN APLIKASI WEB (HTML):
 Jika mode aplikasi AKTIF, Anda WAJIB menulis SELURUH kode aplikasi (HTML, CSS, dan JavaScript) di dalam SATU file/blok kode HTML lengkap. JANGAN dipisah-pisah. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
-Jika diminta membuat dokumen/artikel/laporan (Word/PDF), rangkum kontennya MURNI di dalam blok kode `document`.
+Jika diminta membuat dokumen/artikel/laporan, rangkum kontennya MURNI di dalam blok kode `document`.
 Contoh:
 %sdocument
 # Judul Dokumen
@@ -337,7 +338,7 @@ class AgentTools:
         if re.search(r'https?://\S+', prompt):
             return True
             
-        # Jika panjang prompt sangat pendek (misal "halo", "oke"), biasanya tidak butuh alat
+        # Jika panjang prompt sangat pendek, biasanya tidak butuh alat
         if len(prompt) < 15:
              # Cek dulu apakah itu simbol saham pendek spt "BBCA"
              if prompt.isupper() and 3 <= len(prompt) <= 5:
@@ -353,12 +354,10 @@ class AgentTools:
 
     @staticmethod
     def cari_informasi_web(query: str) -> str:
-        from bs4 import BeautifulSoup 
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Origin': 'https://lite.duckduckgo.com',
                 'Referer': 'https://lite.duckduckgo.com/'
@@ -395,7 +394,7 @@ class AgentTools:
                 search_res = requests.get(search_url, timeout=10).json()
                 wiki_lang = "en"
                 if not search_res[1]:
-                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}'."
+                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}' di Wikipedia."
             
             title = search_res[1][0]
             img_url = f"https://{wiki_lang}.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles={title}"
@@ -404,14 +403,13 @@ class AgentTools:
             for page_id, page_data in pages.items():
                 if "original" in page_data:
                     url_gambar = page_data["original"]["source"]
-                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tolong segera balas pengguna dan tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
+                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
             return f"Pesan Sistem: Artikel mengenai '{title}' ditemukan tetapi tidak ada foto yang relevan."
         except Exception as e:
             return f"Gagal mencari gambar: {str(e)}"
 
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
-        from bs4 import BeautifulSoup 
         try:
             video_id = None
             if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
@@ -589,8 +587,6 @@ class MediaUtils:
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
-            from bs4 import BeautifulSoup 
-            
             if not url.startswith('http'):
                 url = 'https://' + url
                 
@@ -608,6 +604,16 @@ class MediaUtils:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
+            # --- EKSTRAKSI GAMBAR ---
+            daftar_gambar = []
+            for img in soup.find_all('img'):
+                src = img.get('src') or img.get('data-src') 
+                if src:
+                    src = urljoin(url, src) 
+                    alt = img.get('alt', 'Gambar dari website').strip() or 'Gambar website'
+                    if not any(ext in src.lower() for ext in ['.svg', 'icon', 'logo', 'avatar']):
+                        daftar_gambar.append(f"- ![{alt}]({src})")
+            
             for element in soup(['script', 'style', 'nav', 'footer', 'header', 'noscript']):
                 element.extract()
                 
@@ -616,7 +622,13 @@ class MediaUtils:
             if not text:
                 return "Pesan Sistem: Berhasil membuka web, tetapi konten kosong. Kemungkinan web ini menggunakan JavaScript penuh."
                 
-            return text[:15000]
+            hasil_akhir = text[:12000]
+            
+            # Tambahkan info gambar ke agen
+            if daftar_gambar:
+                hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:5])
+                
+            return hasil_akhir
         except Exception as e: 
             return f"Error Link: {str(e)}"
 
@@ -673,7 +685,6 @@ class MediaUtils:
 class MarketUtils:
     @staticmethod
     def ambil_data_pasar(simbol_ticker: str) -> str:
-        import yfinance as yf 
         try:
             if not simbol_ticker.endswith("-USD") and len(simbol_ticker) <= 5:
                 if simbol_ticker.upper() in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE']:
@@ -684,7 +695,6 @@ class MarketUtils:
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e: return f"Gagal mengambil data dari API: {str(e)}"
-
 
 # ==========================================
 # 4. KOMPONEN UI & TAMPILAN
@@ -907,7 +917,6 @@ def main():
     if audio_bytes and not prompt_text:
         with st.spinner("Menerjemahkan suara..."):
             try: 
-                import speech_recognition as sr 
                 prompt = sr.Recognizer().recognize_google(sr.Recognizer().record(sr.AudioFile(io.BytesIO(audio_bytes))), language="id-ID")
             except: st.warning("Suara tidak terdengar jelas.")
 
@@ -946,11 +955,9 @@ def main():
         # ====================================================
         butuh_alat = False
         
-        # 1. Cek sederhana apakah pertanyaan ini berpotensi butuh alat
         if AgentTools.butuh_alat_nggak(prompt):
             butuh_alat = True
             
-        # 2. Jika ada lampiran, biarkan sesuai hasil deteksi prompt
         if st.session_state.temp_image or st.session_state.temp_doc:
             pass 
             
@@ -1032,7 +1039,6 @@ def main():
                                     "content": str(hasil_fungsi),
                                 })
                                 
-                            # Jeda aman untuk memastikan tidak menabrak limit 40 RPM
                             time.sleep(2.0) 
                             
                     except Exception as e:
@@ -1052,8 +1058,8 @@ def main():
                     client, 
                     model=selected_model, 
                     messages=payload_msgs, 
-                    temperature=0.4, 
-                    max_tokens=8000, 
+                    temperature=0.7, 
+                    max_tokens=4000, 
                     stream=True
                 )
                 
@@ -1067,7 +1073,6 @@ def main():
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-                # --- MENGHITUNG DAN MENYIMPAN TOTAL TOKEN YANG DIGUNAKAN ---
                 st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
 
                 if st.session_state.current_session_id is None:
