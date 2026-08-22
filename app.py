@@ -36,7 +36,7 @@ B3 = "`" * 3
 MODEL_MAPPING = {
     "meta/muse-glimmer-30b": "1. Aether (Flash)",
     "google/diffusiongemma-26b-a4b-it": "2. Vesper (Pro)",
-    "meta/muse-glimmer-30b": "3. Numayr (Eksklusif)",
+    "minimaxai/minimax-m3": "3. Numayr (Eksklusif)",
     "deepseek-ai/deepseek-v4-flash-0731": "4. Nova (Pengembang)",
     "openai/gpt-oss-120b": "5. Zeta (unstable)",
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
