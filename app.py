@@ -170,7 +170,7 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI ditanya spesifik.
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi.
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
-4. Anda adalah AI yang sangat ramah.
+4. Jangan Pernah membagikan informasi sensitif.
 
 ATURAN MENAMPILKAN GAMBAR/FOTO:
 1. FOTO ASLI: Jika pengguna meminta foto tokoh/tempat, gunakan alat `cari_gambar` atau ekstrak dari `baca_isi_website`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
@@ -570,7 +570,15 @@ class MediaUtils:
             if msg["role"] == "user":
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-                text = text.split("[AKHIR KONTEN]\n\n")[-1]
+                
+                # --- BERSIHKAN INSTRUKSI BACKEND DARI JUDUL ---
+                if "Pertanyaan/Instruksi Pengguna:\n" in text:
+                    text = text.split("Pertanyaan/Instruksi Pengguna:\n")[-1]
+                else:
+                    text = text.split("[AKHIR KONTEN]\n\n")[-1]
+                    text = text.split("[AKHIR DOKUMEN]\n\n")[-1]
+                
+                text = text.strip()
                 return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
@@ -594,8 +602,6 @@ class MediaUtils:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # --- EKSTRAKSI GAMBAR DIPERBARUI ---
-            # Menambah tangkapan untuk lazy loading dan fallback nama file
             daftar_gambar = []
             for img in soup.find_all('img'):
                 src = img.get('src') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-original')
@@ -620,7 +626,6 @@ class MediaUtils:
             hasil_akhir = text[:12000]
             
             if daftar_gambar:
-                # Limit gambar dinaikkan menjadi 50
                 hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:50])
                 
             return hasil_akhir
@@ -705,6 +710,13 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
+            /* Memperbaiki tampilan tombol riwayat obrolan di sidebar */
+            .stButton>button {
+                text-align: left;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -858,6 +870,15 @@ def main():
             if not content: continue
             
             text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+            
+            # --- BERSIHKAN INSTRUKSI BACKEND DARI LAYAR CHAT USER ---
+            if message["role"] == "user":
+                if "Pertanyaan/Instruksi Pengguna:\n" in text_disp:
+                    split_text = text_disp.split("Pertanyaan/Instruksi Pengguna:\n")
+                    if len(split_text) > 1:
+                        text_disp = split_text[-1]
+            # --------------------------------------------------------
+            
             st.markdown(text_disp)
             
             if message["role"] == "assistant":
