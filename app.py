@@ -703,55 +703,26 @@ def inject_custom_css():
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
             
-            /* TAMPILAN SIDEBAR ALA GEMINI */
-            [data-testid="stSidebar"] {
-                background-color: var(--secondary-background-color);
-            }
-            
-            /* Menghilangkan tombol navigasi halaman bawaan jika ada */
-            [data-testid="stSidebarNav"] {display: none;} 
-            
-            /* Desain Tombol Sidebar Transparan dan Rounded (Pill) */
+            /* CSS UNTUK MEMASTIKAN TEKS TERPOTONG DENGAN TITIK TIGA DI SIDEBAR */
             [data-testid="stSidebar"] .stButton > button {
-                border: none !important;
-                background-color: transparent !important;
-                border-radius: 24px !important;
-                padding: 0.25rem 0.75rem !important;
-                height: 2.5rem !important;
-                min-height: 2.5rem !important;
-                display: flex;
-                justify-content: flex-start;
-                align-items: center;
-                width: 100%;
-                box-shadow: none !important;
+                display: block !important;
+                width: 100% !important;
+                text-align: left !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
             }
-            
-            /* Hover abu-abu ala Gemini */
-            [data-testid="stSidebar"] .stButton > button:hover {
-                background-color: rgba(125, 125, 125, 0.15) !important;
+            [data-testid="stSidebar"] .stButton > button > div {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                display: block !important;
             }
-            
-            /* Active Session (Warna utama saat dipilih) */
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-                background-color: rgba(125, 78, 255, 0.15) !important;
-                color: #7d4eff !important;
-                font-weight: 600 !important;
-            }
-            
-            /* Memaksa Ellipsis (Teks Terpotong dengan Titik Tiga) */
             [data-testid="stSidebar"] .stButton > button p {
                 white-space: nowrap !important;
                 overflow: hidden !important;
                 text-overflow: ellipsis !important;
                 margin: 0 !important;
-                text-align: left !important;
-                width: 100% !important;
-                display: block !important;
-            }
-            
-            /* Menyesuaikan jarak antar komponen di riwayat */
-            [data-testid="stHorizontalBlock"] {
-                gap: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -846,23 +817,21 @@ def main():
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
         st.divider()
         
-        # --- PERUBAHAN TATA LETAK TOMBOL CHAT BARU & HAPUS ---
-        col_new, col_del = st.columns(2, gap="small")
-        with col_new:
-            if st.button("➕ Chat Baru", use_container_width=True, type="primary"):
+        # --- TOMBOL CHAT BARU DAN HAPUS DISUSUN ATAS-BAWAH ---
+        if st.button("➕ Chat Baru", use_container_width=True, type="primary"):
+            st.session_state.current_session_id = None
+            st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            st.session_state.token_usage = 0 
+            st.rerun()
+            
+        if st.button("🗑️ Hapus Obrolan Aktif", use_container_width=True):
+            if st.session_state.current_session_id:
+                DatabaseManager.delete_session(st.session_state.current_session_id)
                 st.session_state.current_session_id = None
                 st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                st.session_state.token_usage = 0 
                 st.rerun()
-        with col_del:
-            if st.button("🗑️ Hapus Chat", use_container_width=True):
-                if st.session_state.current_session_id:
-                    DatabaseManager.delete_session(st.session_state.current_session_id)
-                    st.session_state.current_session_id = None
-                    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                    st.rerun()
-                else:
-                    st.toast("Pilih obrolan aktif terlebih dahulu untuk dihapus.")
+            else:
+                st.toast("Tidak ada obrolan aktif yang bisa dihapus.")
 
         st.markdown("### 🗂️ Riwayat")
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
@@ -870,14 +839,17 @@ def main():
         if sessions:
             with st.container(height=450, border=False):
                 for sess_id, title in sessions:
-                    # Bersihkan sisa-sisa instruksi dari database lama
-                    clean_title = re.sub(r'\[MODE.*?\]\n*', '', title)
-                    clean_title = clean_title.replace("Pertanyaan/Instruksi Pengguna:\n", "").strip()
+                    
+                    # --- MEMBERSIHKAN JUDUL EKSTREM ---
+                    clean_title = title.replace("[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]", "")
+                    clean_title = clean_title.replace("[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya. Gabungkan HTML, CSS, dan JS dalam SATU blok kode `html`.]", "")
+                    clean_title = clean_title.replace("Pertanyaan/Instruksi Pengguna:\n", "")
+                    clean_title = clean_title.strip()
                     
                     btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
                     
-                    # Tampilkan judul chat sebagai tombol FULL WIDTH (tanpa tong sampah di sampingnya)
-                    if st.button(f"💬 {clean_title}", key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
+                    # HANYA JUDUL, FULL WIDTH, TANPA IKON
+                    if st.button(clean_title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
                         st.session_state.current_session_id = sess_id
                         st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                         st.session_state.token_usage = 0 
