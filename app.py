@@ -34,7 +34,7 @@ BASE_URL = "https://integrate.api.nvidia.com/v1"
 B3 = "`" * 3
 
 MODEL_MAPPING = {
-    "nvidia/nemotron-3.5-lightning-30b-a3b": "1. Aether (Flash)",
+    "meta/muse-glimmer-30b": "1. Aether (Flash)",
     "google/diffusiongemma-26b-a4b-it": "2. Vesper (Pro)",
     "meta/muse-glimmer-30b": "3. Numayr (Eksklusif)",
     "deepseek-ai/deepseek-v4-flash-0731": "4. Nova (Pengembang)",
