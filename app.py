@@ -1052,8 +1052,8 @@ def main():
                     client, 
                     model=selected_model, 
                     messages=payload_msgs, 
-                    temperature=0.7, 
-                    max_tokens=4000, 
+                    temperature=0.4, 
+                    max_tokens=8000, 
                     stream=True
                 )
                 
