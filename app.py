@@ -570,7 +570,6 @@ class MediaUtils:
             if msg["role"] == "user":
                 content = msg["content"]
                 text = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-                
                 text = text.strip()
                 return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
@@ -595,8 +594,6 @@ class MediaUtils:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # --- EKSTRAKSI GAMBAR DIPERBARUI ---
-            # Menambah tangkapan untuk lazy loading dan fallback nama file
             daftar_gambar = []
             for img in soup.find_all('img'):
                 src = img.get('src') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-original')
@@ -621,7 +618,6 @@ class MediaUtils:
             hasil_akhir = text[:12000]
             
             if daftar_gambar:
-                # Limit gambar dinaikkan menjadi 50
                 hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:50])
                 
             return hasil_akhir
@@ -706,26 +702,56 @@ def inject_custom_css():
             .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
-            /* CSS yang diperkuat untuk memaksa teks tombol sidebar terpotong dengan ellipsis (...) */
-            .stButton > button {
-                display: block;
+            
+            /* TAMPILAN SIDEBAR ALA GEMINI */
+            [data-testid="stSidebar"] {
+                background-color: var(--secondary-background-color);
+            }
+            
+            /* Menghilangkan tombol navigasi halaman bawaan jika ada */
+            [data-testid="stSidebarNav"] {display: none;} 
+            
+            /* Desain Tombol Sidebar Transparan dan Rounded (Pill) */
+            [data-testid="stSidebar"] .stButton > button {
+                border: none !important;
+                background-color: transparent !important;
+                border-radius: 24px !important;
+                padding: 0.25rem 0.75rem !important;
+                height: 2.5rem !important;
+                min-height: 2.5rem !important;
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
                 width: 100%;
+                box-shadow: none !important;
+            }
+            
+            /* Hover abu-abu ala Gemini */
+            [data-testid="stSidebar"] .stButton > button:hover {
+                background-color: rgba(125, 125, 125, 0.15) !important;
+            }
+            
+            /* Active Session (Warna utama saat dipilih) */
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+                background-color: rgba(125, 78, 255, 0.15) !important;
+                color: #7d4eff !important;
+                font-weight: 600 !important;
+            }
+            
+            /* Memaksa Ellipsis (Teks Terpotong dengan Titik Tiga) */
+            [data-testid="stSidebar"] .stButton > button p {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                margin: 0 !important;
                 text-align: left !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
+                width: 100% !important;
+                display: block !important;
             }
-            .stButton > button > div {
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                display: block;
-            }
-            .stButton > button p {
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                margin: 0;
+            
+            /* Menyesuaikan jarak antar komponen di riwayat */
+            [data-testid="stHorizontalBlock"] {
+                gap: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -828,12 +854,19 @@ def main():
         st.markdown("### 🗂️ Riwayat Obrolan")
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
         if sessions:
-            with st.container(height=300, border=False):
+            with st.container(height=400, border=False):
                 for sess_id, title in sessions:
+                    
+                    # --- MEMBERSIHKAN JUDUL KOTOR DARI DATABASE LAMA ---
+                    clean_title = re.sub(r'\[MODE.*?\]\n*', '', title)
+                    clean_title = clean_title.replace("Pertanyaan/Instruksi Pengguna:\n", "").strip()
+                    
+                    # Layout diperlebar agar judul memiliki ruang lebih besar
                     col_btn, col_del = st.columns([6, 1], gap="small") 
                     with col_btn:
                         btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                        if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=title):
+                        # Menambahkan ikon chat 💬 di depan judul ala Gemini
+                        if st.button(f"💬 {clean_title}", key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
                             st.session_state.current_session_id = sess_id
                             st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                             st.session_state.token_usage = 0 
@@ -962,12 +995,14 @@ def main():
 
         final_prompt_api = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
+        # YANG DISIMPAN KE RIWAYAT HANYALAH PROMPT MURNI DARI USER
         if st.session_state.temp_image:
             base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
             st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
         else:
             st.session_state.messages.append({"role": "user", "content": prompt})
 
+        # YANG DIKIRIM KE API MENGANDUNG INSTRUKSI SISTEM TAMBAHAN
         payload_khusus_api = copy.deepcopy(st.session_state.messages)
         
         if isinstance(payload_khusus_api[-1]["content"], list):
