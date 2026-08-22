@@ -317,35 +317,25 @@ def setup_database():
 class AgentTools:
     @staticmethod
     def butuh_alat_nggak(prompt: str) -> bool:
-        """
-        Fungsi ringan untuk mendeteksi apakah prompt membutuhkan alat.
-        Mencegah agen memanggil API tools untuk pertanyaan sederhana, menghemat token dan waktu.
-        """
         prompt_lower = prompt.lower()
-        
-        # Kata kunci yang sangat mungkin BUTUH alat
         keywords_butuh_alat = [
-            "saham", "kripto", "harga", "pasar", "ihsg", "usd", "btc", "eth", # Pasar
-            "berita", "terbaru", "hari ini", "fakta", "siapa sekarang", "info", # Web Search
-            "http", "www", "url", "baca web", "isi situs", "ringkas link",    # Web Read
-            "foto", "gambar", "lihat", "rupa", "wajah",                       # Cari Gambar
-            "youtube", "video", "transkrip", "subtitle",                      # Youtube
-            "hitung", "kalkulator", "tambah", "kurang", "kali", "bagi", "+", "-", "*", "/", # Matematika
-            "python", "kode", "eksekusi", "jalankan skrip"                    # Python
+            "saham", "kripto", "harga", "pasar", "ihsg", "usd", "btc", "eth",
+            "berita", "terbaru", "hari ini", "fakta", "siapa sekarang", "info",
+            "http", "www", "url", "baca web", "isi situs", "ringkas link",
+            "foto", "gambar", "lihat", "rupa", "wajah",
+            "youtube", "video", "transkrip", "subtitle",
+            "hitung", "kalkulator", "tambah", "kurang", "kali", "bagi", "+", "-", "*", "/",
+            "python", "kode", "eksekusi", "jalankan skrip"
         ]
         
-        # Jika prompt mengandung URL, pasti butuh alat baca/youtube
         if re.search(r'https?://\S+', prompt):
             return True
             
-        # Jika panjang prompt sangat pendek, biasanya tidak butuh alat
         if len(prompt) < 15:
-             # Cek dulu apakah itu simbol saham pendek spt "BBCA"
              if prompt.isupper() and 3 <= len(prompt) <= 5:
                  return True 
              return False
              
-        # Cek kata kunci
         for kw in keywords_butuh_alat:
             if kw in prompt_lower:
                 return True
@@ -604,15 +594,20 @@ class MediaUtils:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # --- EKSTRAKSI GAMBAR ---
+            # --- EKSTRAKSI GAMBAR DIPERBARUI ---
+            # Menambah tangkapan untuk lazy loading dan fallback nama file
             daftar_gambar = []
             for img in soup.find_all('img'):
-                src = img.get('src') or img.get('data-src') 
+                src = img.get('src') or img.get('data-src') or img.get('data-lazy-src') or img.get('data-original')
                 if src:
                     src = urljoin(url, src) 
-                    alt = img.get('alt', 'Gambar dari website').strip() or 'Gambar website'
+                    alt = img.get('alt', '').strip()
+                    nama_file = src.split('/')[-1]
+                    
+                    deskripsi_gambar = alt if alt else f"Gambar {nama_file}"
+                    
                     if not any(ext in src.lower() for ext in ['.svg', 'icon', 'logo', 'avatar']):
-                        daftar_gambar.append(f"- ![{alt}]({src})")
+                        daftar_gambar.append(f"- ![{deskripsi_gambar}]({src})")
             
             for element in soup(['script', 'style', 'nav', 'footer', 'header', 'noscript']):
                 element.extract()
@@ -624,9 +619,9 @@ class MediaUtils:
                 
             hasil_akhir = text[:12000]
             
-            # Tambahkan info gambar ke agen
             if daftar_gambar:
-                hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:5])
+                # Limit gambar dinaikkan menjadi 50
+                hasil_akhir += "\n\n[DAFTAR GAMBAR DI WEBSITE INI:]\n" + "\n".join(daftar_gambar[:50])
                 
             return hasil_akhir
         except Exception as e: 
