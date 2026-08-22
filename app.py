@@ -313,6 +313,153 @@ def setup_database():
 # ==========================================
 # 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS)
 # ==========================================
+class AgentTools:
+    @staticmethod
+    def butuh_alat_nggak(prompt: str) -> bool:
+        """
+        Fungsi ringan untuk mendeteksi apakah prompt membutuhkan alat.
+        Mencegah agen memanggil API tools untuk pertanyaan sederhana, menghemat token dan waktu.
+        """
+        prompt_lower = prompt.lower()
+        
+        # Kata kunci yang sangat mungkin BUTUH alat
+        keywords_butuh_alat = [
+            "saham", "kripto", "harga", "pasar", "ihsg", "usd", "btc", "eth", # Pasar
+            "berita", "terbaru", "hari ini", "fakta", "siapa sekarang", "info", # Web Search
+            "http", "www", "url", "baca web", "isi situs", "ringkas link",    # Web Read
+            "foto", "gambar", "lihat", "rupa", "wajah",                       # Cari Gambar
+            "youtube", "video", "transkrip", "subtitle",                      # Youtube
+            "hitung", "kalkulator", "tambah", "kurang", "kali", "bagi", "+", "-", "*", "/", # Matematika
+            "python", "kode", "eksekusi", "jalankan skrip"                    # Python
+        ]
+        
+        # Jika prompt mengandung URL, pasti butuh alat baca/youtube
+        if re.search(r'https?://\S+', prompt):
+            return True
+            
+        # Jika panjang prompt sangat pendek (misal "halo", "oke"), biasanya tidak butuh alat
+        if len(prompt) < 15:
+             # Cek dulu apakah itu simbol saham pendek spt "BBCA"
+             if prompt.isupper() and 3 <= len(prompt) <= 5:
+                 return True 
+             return False
+             
+        # Cek kata kunci
+        for kw in keywords_butuh_alat:
+            if kw in prompt_lower:
+                return True
+                
+        return False
+
+    @staticmethod
+    def cari_informasi_web(query: str) -> str:
+        from bs4 import BeautifulSoup 
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://lite.duckduckgo.com',
+                'Referer': 'https://lite.duckduckgo.com/'
+            }
+            data = {'q': query}
+            
+            response = requests.post('https://lite.duckduckgo.com/lite/', headers=headers, data=data, timeout=15)
+            
+            if response.status_code == 403:
+                return "Pesan Sistem: Mesin pencari memblokir IP server Anda karena deteksi Bot."
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            results = []
+            
+            for tr in soup.find_all('tr'):
+                td = tr.find('td', class_='result-snippet')
+                if td: results.append(td.text.strip())
+            
+            if not results: 
+                return f"Pesan Sistem: Tidak menemukan berita atau info mengenai '{query}' di internet."
+                
+            return "Berikut ringkasan hasil pencarian web:\n" + "\n".join(results[:5])
+        except Exception as e:
+            return f"Gagal mencari di web: {str(e)}"
+
+    @staticmethod
+    def cari_gambar(query: str) -> str:
+        try:
+            search_url = f"https://id.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
+            search_res = requests.get(search_url, timeout=10).json()
+            wiki_lang = "id"
+            if not search_res[1]:
+                search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
+                search_res = requests.get(search_url, timeout=10).json()
+                wiki_lang = "en"
+                if not search_res[1]:
+                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}'."
+            
+            title = search_res[1][0]
+            img_url = f"https://{wiki_lang}.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles={title}"
+            img_res = requests.get(img_url, timeout=10).json()
+            pages = img_res.get("query", {}).get("pages", {})
+            for page_id, page_data in pages.items():
+                if "original" in page_data:
+                    url_gambar = page_data["original"]["source"]
+                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tolong segera balas pengguna dan tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
+            return f"Pesan Sistem: Artikel mengenai '{title}' ditemukan tetapi tidak ada foto yang relevan."
+        except Exception as e:
+            return f"Gagal mencari gambar: {str(e)}"
+
+    @staticmethod
+    def ambil_transkrip_youtube(video_url: str) -> str:
+        from bs4 import BeautifulSoup 
+        try:
+            video_id = None
+            if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
+            elif "youtu.be/" in video_url: video_id = video_url.split("youtu.be/")[1].split("?")[0]
+            
+            if not video_id: return "Pesan Sistem: URL YouTube tidak valid."
+            
+            r = requests.get(f"https://youtubetranscript.com/?server_vid2={video_id}", timeout=10)
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'xml')
+                texts = [t.text for t in soup.find_all('text')]
+                if texts:
+                    full_text = " ".join(texts)
+                    return f"Transkrip Video YouTube:\n{full_text[:4000]}..."
+            return "Pesan Sistem: Transkrip/Subtitle video ini tidak tersedia publik."
+        except Exception as e:
+            return f"Gagal mengambil transkrip: {str(e)}"
+
+    @staticmethod
+    def eksekusi_python(kode: str) -> str:
+        try:
+            import sys
+            old_stdout = sys.stdout
+            redirected_output = io.StringIO()
+            sys.stdout = redirected_output
+            
+            local_scope = {}
+            exec(kode, {}, local_scope)
+            
+            sys.stdout = old_stdout
+            output = redirected_output.getvalue()
+            return f"Hasil Output Terminal:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
+        except Exception as e:
+            import sys
+            sys.stdout = sys.__stdout__
+            return f"Error saat menjalankan kode Python: {str(e)}"
+
+    @staticmethod
+    def hitung_matematika(ekspresi: str) -> str:
+        try:
+            allowed_chars = "0123456789+-*/(). "
+            if not all(c in allowed_chars for c in ekspresi):
+                return "Pesan Sistem: Ekspresi mengandung karakter tidak aman."
+            hasil = eval(ekspresi)
+            return f"Hasil kalkulator dari {ekspresi} adalah {hasil}"
+        except Exception as e:
+            return f"Pesan Sistem: Gagal menghitung ({str(e)})."
+
 class MediaUtils:
     @staticmethod
     @st.cache_data(show_spinner=False)
@@ -538,115 +685,6 @@ class MarketUtils:
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
         except Exception as e: return f"Gagal mengambil data dari API: {str(e)}"
 
-class AgentTools:
-    @staticmethod
-    def cari_informasi_web(query: str) -> str:
-        from bs4 import BeautifulSoup 
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Origin': 'https://lite.duckduckgo.com',
-                'Referer': 'https://lite.duckduckgo.com/'
-            }
-            data = {'q': query}
-            
-            response = requests.post('https://lite.duckduckgo.com/lite/', headers=headers, data=data, timeout=15)
-            
-            if response.status_code == 403:
-                return "Pesan Sistem: Mesin pencari memblokir IP server Anda karena deteksi Bot."
-                
-            soup = BeautifulSoup(response.text, 'html.parser')
-            results = []
-            
-            for tr in soup.find_all('tr'):
-                td = tr.find('td', class_='result-snippet')
-                if td: results.append(td.text.strip())
-            
-            if not results: 
-                return f"Pesan Sistem: Tidak menemukan berita atau info mengenai '{query}' di internet."
-                
-            return "Berikut ringkasan hasil pencarian web:\n" + "\n".join(results[:5])
-        except Exception as e:
-            return f"Gagal mencari di web: {str(e)}"
-
-    @staticmethod
-    def cari_gambar(query: str) -> str:
-        try:
-            search_url = f"https://id.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
-            search_res = requests.get(search_url, timeout=10).json()
-            wiki_lang = "id"
-            if not search_res[1]:
-                search_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=1&format=json"
-                search_res = requests.get(search_url, timeout=10).json()
-                wiki_lang = "en"
-                if not search_res[1]:
-                    return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}'."
-            
-            title = search_res[1][0]
-            img_url = f"https://{wiki_lang}.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles={title}"
-            img_res = requests.get(img_url, timeout=10).json()
-            pages = img_res.get("query", {}).get("pages", {})
-            for page_id, page_data in pages.items():
-                if "original" in page_data:
-                    url_gambar = page_data["original"]["source"]
-                    return f"Pesan Sistem: Berhasil menemukan foto '{title}'. Tolong segera balas pengguna dan tampilkan foto ini menggunakan format Markdown: ![{title}]({url_gambar})"
-            return f"Pesan Sistem: Artikel mengenai '{title}' ditemukan tetapi tidak ada foto yang relevan."
-        except Exception as e:
-            return f"Gagal mencari gambar: {str(e)}"
-
-    @staticmethod
-    def ambil_transkrip_youtube(video_url: str) -> str:
-        from bs4 import BeautifulSoup 
-        try:
-            video_id = None
-            if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
-            elif "youtu.be/" in video_url: video_id = video_url.split("youtu.be/")[1].split("?")[0]
-            
-            if not video_id: return "Pesan Sistem: URL YouTube tidak valid."
-            
-            r = requests.get(f"https://youtubetranscript.com/?server_vid2={video_id}", timeout=10)
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'xml')
-                texts = [t.text for t in soup.find_all('text')]
-                if texts:
-                    full_text = " ".join(texts)
-                    return f"Transkrip Video YouTube:\n{full_text[:4000]}..."
-            return "Pesan Sistem: Transkrip/Subtitle video ini tidak tersedia publik."
-        except Exception as e:
-            return f"Gagal mengambil transkrip: {str(e)}"
-
-    @staticmethod
-    def eksekusi_python(kode: str) -> str:
-        try:
-            import sys
-            old_stdout = sys.stdout
-            redirected_output = io.StringIO()
-            sys.stdout = redirected_output
-            
-            local_scope = {}
-            exec(kode, {}, local_scope)
-            
-            sys.stdout = old_stdout
-            output = redirected_output.getvalue()
-            return f"Hasil Output Terminal:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
-        except Exception as e:
-            import sys
-            sys.stdout = sys.__stdout__
-            return f"Error saat menjalankan kode Python: {str(e)}"
-
-    @staticmethod
-    def hitung_matematika(ekspresi: str) -> str:
-        try:
-            allowed_chars = "0123456789+-*/(). "
-            if not all(c in allowed_chars for c in ekspresi):
-                return "Pesan Sistem: Ekspresi mengandung karakter tidak aman."
-            hasil = eval(ekspresi)
-            return f"Hasil kalkulator dari {ekspresi} adalah {hasil}"
-        except Exception as e:
-            return f"Pesan Sistem: Gagal menghitung ({str(e)})."
 
 # ==========================================
 # 4. KOMPONEN UI & TAMPILAN
@@ -906,88 +944,99 @@ def main():
         # ====================================================
         # FASE 1: AGENT THOUGHT PROCESS (Pre-Check Tools)
         # ====================================================
+        butuh_alat = False
+        
+        # 1. Cek sederhana apakah pertanyaan ini berpotensi butuh alat
+        if AgentTools.butuh_alat_nggak(prompt):
+            butuh_alat = True
+            
+        # 2. Jika ada lampiran, biarkan sesuai hasil deteksi prompt
+        if st.session_state.temp_image or st.session_state.temp_doc:
+            pass 
+            
         if selected_model != "google/veo-3.1-fast-generate-preview":
-            with st.spinner("🤖 Agent sedang memikirkan strategi & memeriksa alat..."):
-                try:
-                    payload_agent = copy.deepcopy(st.session_state.messages)
-                    agent_response = panggil_api_dengan_retry(
-                        client,
-                        model=selected_model,
-                        messages=payload_agent,
-                        tools=LAGOS_TOOLS,
-                        tool_choice="auto",
-                        max_tokens=1000
-                    )
-                    
-                    response_message = agent_response.choices[0].message
-                    
-                    if response_message.tool_calls:
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "id": tc.id,
-                                    "type": tc.type,
-                                    "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                                } for tc in response_message.tool_calls
-                            ]
-                        })
+            if butuh_alat:
+                with st.spinner("🤖 Agent sedang memikirkan strategi & memeriksa alat..."):
+                    try:
+                        payload_agent = copy.deepcopy(st.session_state.messages)
+                        agent_response = panggil_api_dengan_retry(
+                            client,
+                            model=selected_model,
+                            messages=payload_agent,
+                            tools=LAGOS_TOOLS,
+                            tool_choice="auto",
+                            max_tokens=1000
+                        )
                         
-                        for tool_call in response_message.tool_calls:
-                            func_name = tool_call.function.name
-                            try: func_args = json.loads(tool_call.function.arguments)
-                            except: func_args = {}
-                            
-                            hasil_fungsi = "Error: Alat tidak dikenali."
-                            
-                            if func_name == "ambil_data_pasar":
-                                ticker = func_args.get("simbol_ticker", "")
-                                st.info(f"⚙️ Agent menganalisis pasar untuk {ticker}...")
-                                hasil_fungsi = MarketUtils.ambil_data_pasar(ticker)
-                                
-                            elif func_name == "cari_informasi_web":
-                                query = func_args.get("query", "")
-                                st.info(f"🔍 Agent mencari informasi di internet: '{query}'...")
-                                hasil_fungsi = AgentTools.cari_informasi_web(query)
-                                
-                            elif func_name == "baca_isi_website":
-                                url = func_args.get("url", "")
-                                st.info(f"🌐 Agent membaca situs web: {url}...")
-                                hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
-                                
-                            elif func_name == "cari_gambar":
-                                query_img = func_args.get("query", "")
-                                st.info(f"🖼️ Agent mencari foto asli: '{query_img}'...")
-                                hasil_fungsi = AgentTools.cari_gambar(query_img)
-                                
-                            elif func_name == "ambil_transkrip_youtube":
-                                yt_url = func_args.get("video_url", "")
-                                st.info(f"🎬 Agent mengekstrak transkrip YouTube: {yt_url}...")
-                                hasil_fungsi = AgentTools.ambil_transkrip_youtube(yt_url)
-                                
-                            elif func_name == "eksekusi_python":
-                                code_snippet = func_args.get("kode", "")
-                                st.info(f"🐍 Agent menjalankan skrip Python...")
-                                hasil_fungsi = AgentTools.eksekusi_python(code_snippet)
-                                
-                            elif func_name == "hitung_matematika":
-                                eks = func_args.get("ekspresi", "")
-                                st.info(f"🧮 Agent menggunakan kalkulator: {eks}...")
-                                hasil_fungsi = AgentTools.hitung_matematika(eks)
-                                
+                        response_message = agent_response.choices[0].message
+                        
+                        if response_message.tool_calls:
                             st.session_state.messages.append({
-                                "tool_call_id": tool_call.id,
-                                "role": "tool",
-                                "name": func_name,
-                                "content": str(hasil_fungsi),
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": tc.id,
+                                        "type": tc.type,
+                                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                                    } for tc in response_message.tool_calls
+                                ]
                             })
                             
-                        # Jeda aman untuk memastikan tidak menabrak limit 40 RPM
-                        time.sleep(2.0) 
-                        
-                except Exception as e:
-                    pass
+                            for tool_call in response_message.tool_calls:
+                                func_name = tool_call.function.name
+                                try: func_args = json.loads(tool_call.function.arguments)
+                                except: func_args = {}
+                                
+                                hasil_fungsi = "Error: Alat tidak dikenali."
+                                
+                                if func_name == "ambil_data_pasar":
+                                    ticker = func_args.get("simbol_ticker", "")
+                                    st.info(f"⚙️ Agent menganalisis pasar untuk {ticker}...")
+                                    hasil_fungsi = MarketUtils.ambil_data_pasar(ticker)
+                                    
+                                elif func_name == "cari_informasi_web":
+                                    query = func_args.get("query", "")
+                                    st.info(f"🔍 Agent mencari informasi di internet: '{query}'...")
+                                    hasil_fungsi = AgentTools.cari_informasi_web(query)
+                                    
+                                elif func_name == "baca_isi_website":
+                                    url = func_args.get("url", "")
+                                    st.info(f"🌐 Agent membaca situs web: {url}...")
+                                    hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
+                                    
+                                elif func_name == "cari_gambar":
+                                    query_img = func_args.get("query", "")
+                                    st.info(f"🖼️ Agent mencari foto asli: '{query_img}'...")
+                                    hasil_fungsi = AgentTools.cari_gambar(query_img)
+                                    
+                                elif func_name == "ambil_transkrip_youtube":
+                                    yt_url = func_args.get("video_url", "")
+                                    st.info(f"🎬 Agent mengekstrak transkrip YouTube: {yt_url}...")
+                                    hasil_fungsi = AgentTools.ambil_transkrip_youtube(yt_url)
+                                    
+                                elif func_name == "eksekusi_python":
+                                    code_snippet = func_args.get("kode", "")
+                                    st.info(f"🐍 Agent menjalankan skrip Python...")
+                                    hasil_fungsi = AgentTools.eksekusi_python(code_snippet)
+                                    
+                                elif func_name == "hitung_matematika":
+                                    eks = func_args.get("ekspresi", "")
+                                    st.info(f"🧮 Agent menggunakan kalkulator: {eks}...")
+                                    hasil_fungsi = AgentTools.hitung_matematika(eks)
+                                    
+                                st.session_state.messages.append({
+                                    "tool_call_id": tool_call.id,
+                                    "role": "tool",
+                                    "name": func_name,
+                                    "content": str(hasil_fungsi),
+                                })
+                                
+                            # Jeda aman untuk memastikan tidak menabrak limit 40 RPM
+                            time.sleep(2.0) 
+                            
+                    except Exception as e:
+                        pass
 
         # ====================================================
         # FASE 2: STREAMING JAWABAN AKHIR
@@ -1000,7 +1049,12 @@ def main():
                 payload_msgs = copy.deepcopy(st.session_state.messages)
 
                 response_stream = panggil_api_dengan_retry(
-                    client, model=selected_model, messages=payload_msgs, temperature=0.7, max_tokens=4000, stream=True
+                    client, 
+                    model=selected_model, 
+                    messages=payload_msgs, 
+                    temperature=0.7, 
+                    max_tokens=4000, 
+                    stream=True
                 )
                 
                 for chunk in response_stream:
