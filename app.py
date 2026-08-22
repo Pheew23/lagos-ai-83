@@ -44,7 +44,7 @@ MODEL_MAPPING = {
 }
 
 # ==========================================
-# FUNGSI AUTO-RETRY ANTI ERROR 429 (Setelan 40 RPM)
+# FUNGSI AUTO-RETRY ANTI ERROR 429
 # ==========================================
 def panggil_api_dengan_retry(client_instance, **kwargs):
     max_retries = 4  
@@ -124,7 +124,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "ambil_transkrip_youtube",
-            "description": "Gunakan alat ini untuk mengambil teks/transkrip dari URL video YouTube.",
+            "description": "Gunakan alat ini untuk mengambil teks/transkrip dari URL video YouTube untuk dirangkum.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -171,6 +171,11 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi.
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
+5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
+
+ATURAN MERANGKUM VIDEO (PENTING):
+1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
+2. Jika pengguna meminta merangkum video Instagram (Reels) atau TikTok, beri tahu dengan sopan bahwa Anda tidak dapat memutar/menonton video tersebut karena sistem keamanan platform yang memblokir ekstraksi otomatis, dan Anda adalah model AI berbasis teks, bukan pemutar video.
 
 ATURAN MENAMPILKAN GAMBAR/FOTO:
 1. FOTO ASLI: Jika pengguna meminta foto tokoh/tempat, gunakan alat `cari_gambar` atau ekstrak dari `baca_isi_website`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
@@ -181,12 +186,8 @@ ATURAN MENAMPILKAN GAMBAR/FOTO:
 ATURAN ANTI-HALUSINASI:
 Jika Anda menggunakan alat dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan". JANGAN PERNAH MENGARANG DATA PALSU!
 
-ATURAN KONFIRMASI FORMAT OUTPUT:
-Jika pengguna memerintahkan membuat sesuatu namun BELUM menyebutkan format spesifik, Anda WAJIB bertanya kembali: "Dalam bentuk apa hasilnya? aplikasi atau word/pdf?". JANGAN hasilkan konten sebelum pengguna memilih.
-
 ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
-Jika pengguna meminta membuat PPT atau slide, Anda HARUS bertindak sebagai Art Director. Analisis teks materi dan pilih tema: "bisnis", "kreatif", "akademik", atau "gelap".
-Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
+Jika pengguna meminta membuat PPT atau slide, rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
 %sjson
 {
   "judul_presentasi": "Judul Utama PPT",
@@ -205,9 +206,6 @@ Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
   ]
 }
 %s
-
-ATURAN PEMBUATAN APLIKASI WEB (HTML):
-Jika mode aplikasi AKTIF, Anda WAJIB menulis SELURUH kode aplikasi (HTML, CSS, dan JavaScript) di dalam SATU file/blok kode HTML lengkap. JANGAN dipisah-pisah. Jika MATI, Anda DILARANG menulis kode HTML/aplikasi sama sekali.
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
 Jika diminta membuat dokumen/artikel/laporan, rangkum kontennya MURNI di dalam blok kode `document`.
@@ -401,22 +399,18 @@ class AgentTools:
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
         try:
+            from youtube_transcript_api import YouTubeTranscriptApi
             video_id = None
             if "watch?v=" in video_url: video_id = video_url.split("watch?v=")[1].split("&")[0]
             elif "youtu.be/" in video_url: video_id = video_url.split("youtu.be/")[1].split("?")[0]
             
             if not video_id: return "Pesan Sistem: URL YouTube tidak valid."
             
-            r = requests.get(f"https://youtubetranscript.com/?server_vid2={video_id}", timeout=10)
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'xml')
-                texts = [t.text for t in soup.find_all('text')]
-                if texts:
-                    full_text = " ".join(texts)
-                    return f"Transkrip Video YouTube:\n{full_text[:4000]}..."
-            return "Pesan Sistem: Transkrip/Subtitle video ini tidak tersedia publik."
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['id', 'en'])
+            full_text = " ".join([t['text'] for t in transcript])
+            return f"Transkrip Video YouTube:\n{full_text[:12000]}..."
         except Exception as e:
-            return f"Gagal mengambil transkrip: {str(e)}"
+            return f"Gagal mengambil transkrip (Kemungkinan video tidak memiliki subtitle/CC publik): {str(e)}"
 
     @staticmethod
     def eksekusi_python(kode: str) -> str:
@@ -703,26 +697,50 @@ def inject_custom_css():
             .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
             .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
             
-            /* CSS UNTUK MEMASTIKAN TEKS TERPOTONG DENGAN TITIK TIGA DI SIDEBAR */
+            /* TAMPILAN SIDEBAR ALA GEMINI */
+            [data-testid="stSidebar"] {
+                background-color: var(--secondary-background-color);
+            }
+            
+            [data-testid="stSidebarNav"] {display: none;} 
+            
             [data-testid="stSidebar"] .stButton > button {
-                display: block !important;
-                width: 100% !important;
-                text-align: left !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
+                border: none !important;
+                background-color: transparent !important;
+                border-radius: 24px !important;
+                padding: 0.25rem 0.75rem !important;
+                height: 2.5rem !important;
+                min-height: 2.5rem !important;
+                display: flex;
+                justify-content: flex-start;
+                align-items: center;
+                width: 100%;
+                box-shadow: none !important;
             }
-            [data-testid="stSidebar"] .stButton > button > div {
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                display: block !important;
+            
+            [data-testid="stSidebar"] .stButton > button:hover {
+                background-color: rgba(125, 125, 125, 0.15) !important;
             }
+            
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+                background-color: rgba(125, 78, 255, 0.15) !important;
+                color: #7d4eff !important;
+                font-weight: 600 !important;
+            }
+            
+            /* Memaksa Ellipsis */
             [data-testid="stSidebar"] .stButton > button p {
                 white-space: nowrap !important;
                 overflow: hidden !important;
                 text-overflow: ellipsis !important;
                 margin: 0 !important;
+                text-align: left !important;
+                width: 100% !important;
+                display: block !important;
+            }
+            
+            [data-testid="stHorizontalBlock"] {
+                gap: 0 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -817,7 +835,7 @@ def main():
         st.success(f"👤 Login sebagai: **{st.session_state.username}**")
         st.divider()
         
-        # --- TOMBOL CHAT BARU DAN HAPUS DISUSUN ATAS-BAWAH ---
+        # Tombol Baru dan Hapus secara vertikal
         if st.button("➕ Chat Baru", use_container_width=True, type="primary"):
             st.session_state.current_session_id = None
             st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -839,17 +857,9 @@ def main():
         if sessions:
             with st.container(height=450, border=False):
                 for sess_id, title in sessions:
-                    
-                    # --- MEMBERSIHKAN JUDUL EKSTREM ---
-                    clean_title = title.replace("[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]", "")
-                    clean_title = clean_title.replace("[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya. Gabungkan HTML, CSS, dan JS dalam SATU blok kode `html`.]", "")
-                    clean_title = clean_title.replace("Pertanyaan/Instruksi Pengguna:\n", "")
-                    clean_title = clean_title.strip()
-                    
                     btn_type = "primary" if st.session_state.current_session_id == sess_id else "secondary"
-                    
-                    # HANYA JUDUL, FULL WIDTH, TANPA IKON
-                    if st.button(clean_title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=clean_title):
+                    # Full Width tanpa icon tong sampah
+                    if st.button(title, key=f"btn_{sess_id}", use_container_width=True, type=btn_type, help=title):
                         st.session_state.current_session_id = sess_id
                         st.session_state.messages = DatabaseManager.load_session_messages(sess_id)
                         st.session_state.token_usage = 0 
@@ -924,8 +934,7 @@ def main():
     inject_auto_scroll()
 
     with st.container():
-        app_mode = st.toggle("🚀 Izinkan Buat Aplikasi Web", value=False, help="Nyalakan ini jika Anda ingin meminta AI menyusun kode aplikasi HTML.")
-        
+        # Toggle dihilangkan karena AI sudah dibebaskan dari mode
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
         if st.session_state.get(f"doc_{uploader_idx}"): st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
@@ -953,11 +962,6 @@ def main():
         with st.chat_message("user"): st.markdown(prompt)
         teks_tambahan = ""
         
-        if app_mode:
-            teks_tambahan += "\n[MODE APLIKASI AKTIF: Anda DIIZINKAN menyusun kode HTML/Aplikasi lengkap jika pengguna memintanya. Gabungkan HTML, CSS, dan JS dalam SATU blok kode `html`.]\n"
-        else:
-            teks_tambahan += "\n[MODE NORMAL AKTIF: Anda DILARANG KERAS menyusun kode HTML/Aplikasi. Jawab dengan teks biasa saja meskipun pengguna menyuruh membuat aplikasi.]\n"
-        
         if st.session_state.temp_doc:
             teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
             if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
@@ -969,17 +973,16 @@ def main():
         for url in semua_url:
             teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
 
-        final_prompt_api = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
-
-        # YANG DISIMPAN KE RIWAYAT HANYALAH PROMPT MURNI DARI USER
         if st.session_state.temp_image:
             base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
             st.session_state.messages.append({"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}]})
         else:
             st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # YANG DIKIRIM KE API MENGANDUNG INSTRUKSI SISTEM TAMBAHAN
         payload_khusus_api = copy.deepcopy(st.session_state.messages)
+        
+        # Injeksi context (dokumen/web) secara tersembunyi
+        final_prompt_api = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
         
         if isinstance(payload_khusus_api[-1]["content"], list):
              payload_khusus_api[-1]["content"][0]["text"] = final_prompt_api
