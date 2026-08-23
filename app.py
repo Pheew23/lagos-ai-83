@@ -846,11 +846,12 @@ def render_brand_bar():
 
 
 def render_profile_card(username):
-    initial = username[0].upper() if username else "?"
+    nama = str(username) if username else "Guest"
+    initial = nama[0].upper() if nama else "G"
     st.markdown(f"""
     <div class="profile-card">
       <div class="profile-avatar">{html_escape(initial)}</div>
-      <div><div class="profile-name">{html_escape(username)}</div>
+      <div><div class="profile-name">{html_escape(nama)}</div>
       <div class="profile-role">ANALYST • AKTIF</div></div>
     </div>""", unsafe_allow_html=True)
 
