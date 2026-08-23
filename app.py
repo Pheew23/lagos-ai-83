@@ -174,10 +174,11 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
+6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah di jawaban.
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
 1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
-2. Jika hasil pencarian tidak relevan, ULANGI pencarian dengan kata kunci berbeda.
+2. Jika hasil pencarian tidak relevan, ULANGI pencarian dengan kata kunci berbeda (MAKSIMAL 2 kali percobaan). Jika tetap tidak ditemukan, jawab "Informasi tidak ditemukan".
 3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
 4. Anda BOLEH memanggil beberapa alat berurutan.
 5. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
@@ -752,7 +753,7 @@ class MarketUtils:
 
 
 # ==========================================
-# 4. KOMPONEN UI BARU (PROFESIONAL)
+# 4. KOMPONEN UI (PROFESIONAL)
 # ==========================================
 def inject_custom_css():
     st.markdown("""
@@ -779,21 +780,18 @@ def inject_custom_css():
     @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
     @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
 
-    /* ===== BRAND BAR ===== */
     .brand-bar{display:flex;justify-content:space-between;align-items:center;padding:4px 2px 20px;animation:fadeUp .5s ease;}
     .brand-logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;color:#fff;}
     .brand-logo .dot{width:36px;height:36px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 20px rgba(124,92,255,.45);}
     .status-pill{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:.75rem;font-weight:700;}
     .status-pill .pulse{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 1.4s infinite;}
 
-    /* ===== HERO LOGIN ===== */
     .hero{text-align:center;padding:30px 0 10px;animation:fadeUp .6s ease;}
     .hero-badge{display:inline-block;padding:6px 16px;border-radius:999px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.35);color:#b7a6ff;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;}
     .hero-title{font-size:2.6rem;font-weight:800;color:#fff;margin:0;}
     .hero-title span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
     .hero-sub{color:var(--muted);font-size:.95rem;max-width:440px;margin:10px auto 26px;}
 
-    /* ===== SIDEBAR ===== */
     [data-testid="stSidebar"]{background:var(--surface) !important;border-right:1px solid var(--border);}
     .profile-card{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;background:linear-gradient(145deg,rgba(124,92,255,.14),rgba(34,211,238,.07));border:1px solid rgba(124,92,255,.3);margin-bottom:8px;}
     .profile-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--grad);color:#fff;font-weight:800;font-size:1.1rem;flex-shrink:0;}
@@ -806,19 +804,16 @@ def inject_custom_css():
     [data-testid="stSidebar"] .stButton>button[kind="primary"]{background:rgba(124,92,255,.16) !important;color:#b7a6ff !important;font-weight:700 !important;}
     [data-testid="stSidebar"] .stButton>button p{white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;text-align:left !important;}
 
-    /* ===== TOMBOL UMUM ===== */
     .stButton>button{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:12px;font-weight:600;}
     .stButton>button:hover{border-color:rgba(124,92,255,.5);}
     .stButton>button[kind="primary"]{background:var(--grad) !important;border:none !important;color:#fff !important;font-weight:700;box-shadow:0 6px 22px rgba(124,92,255,.35);}
     .stDownloadButton>button{background:var(--grad) !important;border:none !important;color:#fff !important;border-radius:12px;font-weight:700;}
 
-    /* ===== INPUT & FORM ===== */
     .stTextInput input,.stTextInput>div>input{background:var(--input) !important;border:1px solid var(--border) !important;border-radius:12px;color:var(--text);}
     .stTabs [data-testid="stTabsSelectionBar"]{background:var(--grad);height:2px;}
     .stTabs button{color:var(--muted);font-weight:700;}
     .stTabs button[aria-selected="true"]{color:#fff;}
 
-    /* ===== CHAT BUBBLES ===== */
     [data-testid="stChatMessage"]{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 18px;margin-bottom:12px;animation:fadeUp .45s ease both;}
     .user-bubble{display:flex;justify-content:flex-end;margin:14px 0;animation:fadeUp .45s ease both;}
     .user-bubble .inner{max-width:82%;padding:12px 20px;border-radius:18px 18px 4px 18px;background:linear-gradient(135deg,#7c5cff,#5a3df0);color:#fff;box-shadow:0 6px 24px rgba(124,92,255,.35);white-space:pre-wrap;line-height:1.5;}
@@ -830,8 +825,6 @@ def inject_custom_css():
     [data-testid="stChatInput"] textarea:focus{border-color:transparent !important;box-shadow:0 0 0 2px rgba(124,92,255,.6) !important;}
 
     pre,.stCodeBlock{background:#0f1320 !important;border:1px solid var(--border);border-radius:12px;}
-
-    /* ===== INFO BOX ===== */
     .stAlert{border-radius:12px !important;border:1px solid var(--border) !important;}
     </style>
     """, unsafe_allow_html=True)
@@ -858,6 +851,14 @@ def render_profile_card(username):
 
 def render_agent_chip(nama):
     st.markdown(f'<div class="agent-chip"><span class="pulse"></span> ⚙️ {html_escape(nama)}</div>', unsafe_allow_html=True)
+
+
+def bersihkan_teks_response(teks):
+    if not teks:
+        return ""
+    teks = re.sub(r'<atem:.*?(</atem:function_calls>|$)', '', teks, flags=re.DOTALL)
+    teks = re.sub(r'<\|[^|]*\|>', '', teks)
+    return teks.strip()
 
 
 def render_hero_login():
@@ -946,7 +947,6 @@ def main():
         cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
         st.session_state.set_cookie = False
 
-    # ========== HALAMAN LOGIN ==========
     if not st.session_state.logged_in:
         render_hero_login()
         col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -973,7 +973,6 @@ def main():
                         else: st.warning("⚠️ Harap isi data!")
         st.stop()
 
-    # ========== APLIKASI UTAMA ==========
     render_brand_bar()
 
     with st.sidebar:
@@ -1032,7 +1031,6 @@ def main():
             st.session_state.del_cookie = True
             st.rerun()
 
-    # ========== TAMPILAN PESAN ==========
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] in ["system", "tool"]: continue
 
@@ -1091,7 +1089,6 @@ def main():
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
-    # ========== INPUT PESAN ==========
     with st.container():
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"):
@@ -1209,8 +1206,7 @@ def main():
                 })
 
                 for t_call in response_message.tool_calls:
-                    nama_fungsi = t_call.function.name
-                    render_agent_chip(nama_fungsi)
+                    render_agent_chip(t_call.function.name)
 
                 for tool_call in response_message.tool_calls:
                     func_name = tool_call.function.name
@@ -1259,7 +1255,7 @@ def main():
                 st.error(f"Error pada loop agent: {str(e)}")
                 break
 
-        # ========== STREAMING JAWABAN ==========
+        # ========== STREAMING JAWABAN AKHIR ==========
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant" \
                 and "tool_calls" not in st.session_state.messages[-1]:
             st.session_state.messages.pop()
@@ -1269,22 +1265,35 @@ def main():
             full_response = ""
 
             try:
-                response_stream = panggil_api_dengan_retry(
-                    client,
-                    model=selected_model,
-                    messages=payload_khusus_api,
-                    temperature=0.7,
-                    max_tokens=4000,
-                    stream=True
-                )
+                try:
+                    response_stream = panggil_api_dengan_retry(
+                        client,
+                        model=selected_model,
+                        messages=payload_khusus_api,
+                        tools=LAGOS_TOOLS,
+                        tool_choice="none",
+                        temperature=0.7,
+                        max_tokens=4000,
+                        stream=True
+                    )
+                except Exception:
+                    response_stream = panggil_api_dengan_retry(
+                        client,
+                        model=selected_model,
+                        messages=payload_khusus_api,
+                        temperature=0.7,
+                        max_tokens=4000,
+                        stream=True
+                    )
 
                 for chunk in response_stream:
                     if chunk.choices and len(chunk.choices) > 0:
                         delta = chunk.choices[0].delta.content
                         if delta:
                             full_response += delta
-                            placeholder.markdown(full_response + "▌")
+                            placeholder.markdown(bersihkan_teks_response(full_response) + "▌")
 
+                full_response = bersihkan_teks_response(full_response)
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
