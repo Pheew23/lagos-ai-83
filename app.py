@@ -12,6 +12,7 @@ import time
 from urllib.parse import urljoin, urlparse, parse_qs, unquote, quote
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional
+from html import escape as html_escape
 
 import requests
 import yfinance as yf
@@ -43,9 +44,6 @@ MODEL_MAPPING = {
     "google/veo-3.1-fast-generate-preview": "6. Generator Gambar (coming soon)"
 }
 
-# ==========================================
-# SESI HTTP GLOBAL (anti-blokir, dipakai semua tools web)
-# ==========================================
 HTTP = requests.Session()
 HTTP.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -53,9 +51,6 @@ HTTP.headers.update({
     'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
 })
 
-# ==========================================
-# FUNGSI AUTO-RETRY ANTI ERROR 429
-# ==========================================
 def panggil_api_dengan_retry(client_instance, **kwargs):
     max_retries = 4
     for attempt in range(max_retries):
@@ -70,9 +65,6 @@ def panggil_api_dengan_retry(client_instance, **kwargs):
             else:
                 raise e
 
-# ==========================================
-# DEFINISI KOTAK ALAT (TOOLS) AI AGENT
-# ==========================================
 LAGOS_TOOLS = [
     {
         "type": "function",
@@ -92,11 +84,11 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_informasi_web",
-            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari). Hasil berisi JUDUL, URL, dan RINGKASAN. Gunakan untuk apa pun yang butuh data terbaru.",
+            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari). Hasil berisi JUDUL, URL, dan RINGKASAN.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Kata kunci singkat & padat. Jika hasil buruk, coba sinonim, bahasa Inggris, atau tambahkan tahun."}
+                    "query": {"type": "string", "description": "Kata kunci singkat & padat."}
                 },
                 "required": ["query"]
             }
@@ -106,7 +98,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "baca_isi_website",
-            "description": "Baca isi lengkap halaman dari URL (artikel, tabel, tautan gambar) dalam bentuk teks bersih. Gunakan SETELAH cari_informasi_web untuk mendalami sumber paling relevan.",
+            "description": "Baca isi lengkap halaman dari URL dalam bentuk teks bersih.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -120,11 +112,11 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_gambar",
-            "description": "Gunakan alat ini untuk mencari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata dari Wikipedia.",
+            "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata dari Wikipedia.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya (contoh: 'Menara Eiffel', 'Joko Widodo')."}
+                    "query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya."}
                 },
                 "required": ["query"]
             }
@@ -134,7 +126,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "ambil_transkrip_youtube",
-            "description": "Gunakan alat ini untuk mengambil teks/transkrip dari URL video YouTube untuk dirangkum.",
+            "description": "Ambil teks/transkrip dari URL video YouTube untuk dirangkum.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -148,7 +140,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "eksekusi_python",
-            "description": "Gunakan alat ini untuk menjalankan skrip Python murni (analisis data, pembuatan logika, atau kalkulasi rumit).",
+            "description": "Jalankan skrip Python murni (analisis data, logika, kalkulasi).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -162,7 +154,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "hitung_matematika",
-            "description": "Gunakan alat ini untuk menghitung operasi matematika agar hasilnya akurat.",
+            "description": "Hitung operasi matematika agar hasilnya akurat.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -184,49 +176,41 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
-1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, atau apa pun yang berubah seiring waktu, WAJIB panggil cari_informasi_web terlebih dahulu. Dilarang menjawab dari memori lama.
-2. Jika hasil pencarian tidak relevan atau kosong, ULANGI pencarian dengan kata kunci berbeda (sinonim, bahasa Inggris, atau tambahkan tahun berjalan).
-3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan dari hasil pencarian, lalu rangkum isinya dengan kata-kata sendiri.
-4. Anda BOLEH memanggil beberapa alat berurutan (cari -> baca -> hitung) dalam satu percakapan untuk riset berlapis.
+1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
+2. Jika hasil pencarian tidak relevan, ULANGI pencarian dengan kata kunci berbeda.
+3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
+4. Anda BOLEH memanggil beberapa alat berurutan.
 5. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
-6. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan" beserta alasan singkat. JANGAN MENGARANG.
+6. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan". JANGAN MENGARANG.
 
 ATURAN MERANGKUM VIDEO (PENTING):
 1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
-2. Jika pengguna meminta merangkum video Instagram (Reels) atau TikTok, beri tahu dengan sopan bahwa Anda tidak dapat memutar/menonton video tersebut karena sistem keamanan platform yang memblokir ekstraksi otomatis, dan Anda adalah model AI berbasis teks, bukan pemutar video.
+2. Instagram/TikTok: beri tahu dengan sopan bahwa Anda tidak dapat memutar video tersebut.
 
 ATURAN MENAMPILKAN GAMBAR/FOTO:
-1. FOTO ASLI: Jika pengguna meminta foto tokoh/tempat, gunakan alat `cari_gambar` atau ekstrak dari `baca_isi_website`. Tampilkan hasil URL menggunakan Markdown: `![Deskripsi](URL)`
-2. ILUSTRASI/GAMBAR BUATAN: Jika pengguna meminta DIBUATKAN ilustrasi, lukisan, atau gambar imajinasi/fiksi, JANGAN gunakan alat! Langsung render Markdown berikut:
+1. FOTO ASLI: gunakan alat `cari_gambar`. Tampilkan dengan Markdown: `![Deskripsi](URL)`
+2. ILUSTRASI/GAMBAR BUATAN: Langsung render Markdown:
 `![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail_yang_panjang?width=800&height=600&nologo=true)`
-(Ganti semua spasi pada deskripsi bahasa inggris tersebut dengan %%20).
+(Ganti spasi dengan %%20).
 
 ATURAN ANTI-HALUSINASI:
-Jika Anda menggunakan alat dan informasi yang dicari pengguna TIDAK ADA, Anda WAJIB mengatakan: "Informasi tidak ditemukan". JANGAN PERNAH MENGARANG DATA PALSU!
+Jika informasi TIDAK ADA, WAJIB katakan: "Informasi tidak ditemukan". JANGAN MENGARANG!
 
 ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
-Jika pengguna meminta membuat PPT atau slide, rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
+Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
 %sjson
 {
   "judul_presentasi": "Judul Utama PPT",
   "rekomendasi_tema": "bisnis",
   "slides": [
-    {
-      "slide_type": "title",
-      "title": "Judul Utama",
-      "content": "Sub-judul / Penulis"
-    },
-    {
-      "slide_type": "content",
-      "title": "Judul Slide",
-      "content": ["Poin 1", "Poin 2", "Poin 3"]
-    }
+    {"slide_type": "title", "title": "Judul Utama", "content": "Sub-judul / Penulis"},
+    {"slide_type": "content", "title": "Judul Slide", "content": ["Poin 1", "Poin 2", "Poin 3"]}
   ]
 }
 %s
 
 ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
-Jika diminta membuat dokumen/artikel/laporan, rangkum kontennya MURNI di dalam blok kode `document`.
+Rangkum kontennya MURNI di dalam blok kode `document`.
 Contoh:
 %sdocument
 # Judul Dokumen
@@ -332,27 +316,21 @@ def setup_database():
 # ==========================================
 class AgentTools:
 
-    # ---------- PENCARIAN WEB MULTI-MESIN ----------
     @staticmethod
     def _parse_ddg_html(soup) -> List[tuple]:
         hasil = []
         for res in soup.select("div.result")[:6]:
             a = res.select_one("a.result__a")
             sn = res.select_one(".result__snippet")
-            if not a and not sn:
-                continue
+            if not a and not sn: continue
             url = a.get("href", "") if a else ""
-            if url.startswith("//"):
-                url = "https:" + url
+            if url.startswith("//"): url = "https:" + url
             if "uddg=" in url:
-                try:
-                    url = unquote(parse_qs(urlparse(url).query)["uddg"][0])
-                except Exception:
-                    pass
+                try: url = unquote(parse_qs(urlparse(url).query)["uddg"][0])
+                except: pass
             judul = a.get_text(" ", strip=True) if a else ""
             snippet = sn.get_text(" ", strip=True) if sn else ""
-            if judul or snippet:
-                hasil.append((judul, url, snippet))
+            if judul or snippet: hasil.append((judul, url, snippet))
         return hasil
 
     @staticmethod
@@ -361,13 +339,11 @@ class AgentTools:
         for li in soup.select("li.b_algo")[:6]:
             a = li.select_one("h2 a")
             p = li.select_one("p")
-            if not a:
-                continue
+            if not a: continue
             judul = a.get_text(" ", strip=True)
             url = a.get("href", "")
             snippet = p.get_text(" ", strip=True) if p else ""
-            if judul and url.startswith("http"):
-                hasil.append((judul, url, snippet))
+            if judul and url.startswith("http"): hasil.append((judul, url, snippet))
         return hasil
 
     @staticmethod
@@ -377,33 +353,26 @@ class AgentTools:
                 s = HTTP.get(f"https://{lang}.wikipedia.org/w/api.php",
                              params={"action": "opensearch", "search": query, "limit": 1, "format": "json"},
                              timeout=10).json()
-                if not s[1]:
-                    continue
+                if not s[1]: continue
                 title = s[1][0]
                 summ = HTTP.get(
                     f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
                     timeout=10).json()
                 extract = summ.get("extract", "")
                 url = summ.get("content_urls", {}).get("desktop", {}).get("page", "")
-                if extract:
-                    return [(f"Wikipedia: {title}", url, extract)]
-            except Exception:
-                continue
+                if extract: return [(f"Wikipedia: {title}", url, extract)]
+            except: continue
         return []
 
     @staticmethod
     def cari_informasi_web(query: str) -> str:
         hasil = []
-
-        # Mesin 1: DuckDuckGo HTML
         try:
             r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=15)
             if r.status_code == 200:
                 hasil = AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser"))
-        except Exception:
-            pass
+        except: pass
 
-        # Mesin 2: DuckDuckGo Lite
         if not hasil:
             try:
                 r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=15)
@@ -411,45 +380,32 @@ class AgentTools:
                     soup = BeautifulSoup(r.text, "html.parser")
                     for tr in soup.find_all("tr"):
                         td = tr.find("td", class_="result-snippet")
-                        if td:
-                            hasil.append(("", "", td.get_text(" ", strip=True)))
-                    for a in soup.find_all("a", href=True):
-                        if a["href"].startswith("http") and len(a.get_text(strip=True)) > 15:
-                            hasil.append((a.get_text(" ", strip=True), a["href"], ""))
+                        if td: hasil.append(("", "", td.get_text(" ", strip=True)))
                     hasil = hasil[:6]
-            except Exception:
-                pass
+            except: pass
 
-        # Mesin 3: Bing
         if not hasil:
             try:
                 r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 8}, timeout=15)
                 if r.status_code == 200:
                     hasil = AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser"))
-            except Exception:
-                pass
+            except: pass
 
-        # Mesin 4: Wikipedia (fakta entitas)
         if not hasil:
             hasil = AgentTools._fallback_wikipedia(query)
 
         if not hasil:
-            return (f"Pesan Sistem: Tidak menemukan informasi mengenai '{query}' di semua mesin pencari. "
-                    f"Coba reformulasi kata kunci (sinonim/bahasa Inggris/tambah tahun) dan cari lagi.")
+            return f"Pesan Sistem: Tidak menemukan info '{query}'. Coba kata kunci lain."
 
         out = [f'HASIL PENCARIAN WEB untuk "{query}":']
         for i, (judul, url, snippet) in enumerate(hasil[:6], 1):
             baris = f"{i}. {judul}" if judul else f"{i}."
-            if url:
-                baris += f"\n   URL: {url}"
-            if snippet:
-                baris += f"\n   Ringkasan: {snippet}"
+            if url: baris += f"\n   URL: {url}"
+            if snippet: baris += f"\n   Ringkasan: {snippet}"
             out.append(baris)
-        out.append("CATATAN: Jika butuh detail lebih dalam, panggil baca_isi_website dengan salah satu URL di atas. "
-                   "Cantumkan sumber URL pada jawaban akhir Anda.")
+        out.append("CATATAN: Jika butuh detail, panggil baca_isi_website. Cantumkan sumber URL di jawaban.")
         return "\n".join(out)
 
-    # ---------- GAMBAR ASLI (WIKIPEDIA REST) ----------
     @staticmethod
     def cari_gambar(query: str) -> str:
         try:
@@ -457,20 +413,17 @@ class AgentTools:
                 s = HTTP.get(f"https://{lang}.wikipedia.org/w/api.php",
                              params={"action": "opensearch", "search": query, "limit": 1, "format": "json"},
                              timeout=10).json()
-                if not s[1]:
-                    continue
+                if not s[1]: continue
                 title = s[1][0]
                 summ = HTTP.get(
                     f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
                     timeout=10).json()
                 img = (summ.get("originalimage") or summ.get("thumbnail") or {}).get("source")
-                if img:
-                    return f"Pesan Sistem: Foto '{title}' ditemukan. Tampilkan dengan Markdown: ![{title}]({img})"
-            return f"Pesan Sistem: Tidak menemukan foto nyata untuk '{query}' di Wikipedia."
+                if img: return f"Pesan Sistem: Foto '{title}' ditemukan. Tampilkan dengan: ![{title}]({img})"
+            return f"Pesan Sistem: Tidak menemukan foto untuk '{query}'."
         except Exception as e:
             return f"Gagal mencari gambar: {str(e)}"
 
-    # ---------- TRANSKRIP YOUTUBE (kompatibel API lama & baru) ----------
     @staticmethod
     def ambil_transkrip_youtube(video_url: str) -> str:
         try:
@@ -479,17 +432,16 @@ class AgentTools:
             return "Pesan Sistem: Library youtube_transcript_api belum terinstal."
         try:
             m = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{11})", video_url)
-            if not m:
-                return "Pesan Sistem: URL YouTube tidak valid."
+            if not m: return "Pesan Sistem: URL YouTube tidak valid."
             video_id = m.group(1)
             try:
                 ytt = YouTubeTranscriptApi()
                 try:
                     transkrip = ytt.fetch(video_id, languages=["id", "en"])
-                except Exception:
+                except:
                     daftar = ytt.list(video_id)
                     if not daftar.transcripts:
-                        return "Pesan Sistem: Video tidak memiliki subtitle/CC publik."
+                        return "Pesan Sistem: Video tidak memiliki subtitle."
                     transkrip = ytt.fetch(video_id, languages=[daftar.transcripts[0].language_code])
                 teks = " ".join([s.text for s in transkrip])
             except (TypeError, AttributeError):
@@ -497,9 +449,8 @@ class AgentTools:
                 teks = " ".join([t["text"] for t in data])
             return f"Transkrip Video YouTube:\n{teks[:12000]}"
         except Exception as e:
-            return f"Gagal mengambil transkrip (video mungkin tidak punya subtitle/CC): {str(e)}"
+            return f"Gagal mengambil transkrip: {str(e)}"
 
-    # ---------- EKSEKUSI PYTHON (aman stdout) ----------
     @staticmethod
     def eksekusi_python(kode: str) -> str:
         import sys
@@ -510,26 +461,9 @@ class AgentTools:
             local_scope = {}
             exec(kode, {}, local_scope)
             output = redirected_output.getvalue()
-            return f"Hasil Output Terminal:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
+            return f"Hasil Output:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
         except Exception as e:
-            return f"Error saat menjalankan kode Python: {str(e)}"
-        finally:
-            sys.stdout = old_stdout
-
-    # ---------- KALKULATOR ----------
-    @staticmethod
-    def eksekusi_python(kode: str) -> str:
-        import sys
-        old_stdout = sys.stdout
-        redirected_output = io.StringIO()
-        try:
-            sys.stdout = redirected_output
-            local_scope = {}
-            exec(kode, {}, local_scope)
-            output = redirected_output.getvalue()
-            return f"Hasil Output Terminal:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
-        except Exception as e:
-            return f"Error saat menjalankan kode Python: {str(e)}"
+            return f"Error: {str(e)}"
         finally:
             sys.stdout = old_stdout
 
@@ -538,21 +472,20 @@ class AgentTools:
         try:
             ekspresi = ekspresi.replace(",", ".")
             if not re.match(r'^[\d+\-*/().%\s]+$', ekspresi):
-                return "Pesan Sistem: Ekspresi mengandung karakter tidak aman."
+                return "Pesan Sistem: Karakter tidak aman."
             if len(ekspresi) > 200:
-                return "Pesan Sistem: Ekspresi terlalu panjang."
+                return "Pesan Sistem: Terlalu panjang."
             hasil = eval(ekspresi, {"__builtins__": {}}, {})
-            return f"Hasil kalkulator dari {ekspresi} adalah {hasil}"
+            return f"Hasil dari {ekspresi} adalah {hasil}"
         except Exception as e:
-            return f"Pesan Sistem: Gagal menghitung ({str(e)})."
+            return f"Gagal menghitung ({str(e)})."
 
 
 class MediaUtils:
     @staticmethod
     @st.cache_data(show_spinner=False)
     def konversi_gambar_ke_base64(uploaded_file) -> Optional[str]:
-        if uploaded_file is not None:
-            return base64.b64encode(uploaded_file.read()).decode('utf-8')
+        if uploaded_file is not None: return base64.b64encode(uploaded_file.read()).decode('utf-8')
         return None
 
     @staticmethod
@@ -583,28 +516,19 @@ class MediaUtils:
         doc = Document()
         doc.add_heading('Lagøs AI Agent - Analisis Laporan', 0)
         for msg in riwayat_pesan:
-            if msg["role"] in ["system", "tool"]:
-                continue
-            if msg["role"] == "assistant" and isinstance(msg.get("content"), dict) and "tool_calls" in msg:
-                continue
-
+            if msg["role"] in ["system", "tool"]: continue
+            if msg["role"] == "assistant" and isinstance(msg.get("content"), dict) and "tool_calls" in msg: continue
             role_title = "User" if msg["role"] == "user" else "Lagøs AI"
             doc.add_heading(f"{role_title}", level=2)
             content = msg["content"]
             text_content = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
-            if not text_content or text_content == "None":
-                continue
-
+            if not text_content or text_content == "None": continue
             for line in text_content.split('\n'):
                 line = line.strip()
-                if not line:
-                    continue
-                if line.startswith('# '):
-                    doc.add_heading(line[2:], 3)
-                elif line.startswith('- '):
-                    doc.add_paragraph(line[2:], style='List Bullet')
-                else:
-                    doc.add_paragraph(line)
+                if not line: continue
+                if line.startswith('# '): doc.add_heading(line[2:], 3)
+                elif line.startswith('- '): doc.add_paragraph(line[2:], style='List Bullet')
+                else: doc.add_paragraph(line)
             doc.add_paragraph("\n" + "_" * 40 + "\n")
         bio = io.BytesIO()
         doc.save(bio)
@@ -613,8 +537,7 @@ class MediaUtils:
 
     @staticmethod
     def ekstrak_dokumen(teks: str) -> Optional[str]:
-        if not teks:
-            return None
+        if not teks: return None
         match = re.search(r'`{3}document\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         return match.group(1) if match else None
 
@@ -624,18 +547,12 @@ class MediaUtils:
         doc = Document()
         for line in konten.split('\n'):
             line = line.strip()
-            if not line:
-                continue
-            if line.startswith('# '):
-                doc.add_heading(line[2:], level=1)
-            elif line.startswith('## '):
-                doc.add_heading(line[3:], level=2)
-            elif line.startswith('### '):
-                doc.add_heading(line[4:], level=3)
-            elif line.startswith('- '):
-                doc.add_paragraph(line[2:], style='List Bullet')
-            else:
-                doc.add_paragraph(line)
+            if not line: continue
+            if line.startswith('# '): doc.add_heading(line[2:], level=1)
+            elif line.startswith('## '): doc.add_heading(line[3:], level=2)
+            elif line.startswith('### '): doc.add_heading(line[4:], level=3)
+            elif line.startswith('- '): doc.add_paragraph(line[2:], style='List Bullet')
+            else: doc.add_paragraph(line)
         bio = io.BytesIO()
         doc.save(bio)
         bio.seek(0)
@@ -647,17 +564,14 @@ class MediaUtils:
             from fpdf import FPDF
         except ImportError:
             raise ImportError("Fitur PDF diblokir karena library fpdf2 belum diinstal.")
-
         pdf = FPDF()
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
         pdf.set_font("helvetica", size=12)
-
         for line in konten.split('\n'):
             line = line.strip()
             if not line:
-                pdf.ln(5)
-                continue
+                pdf.ln(5); continue
             if line.startswith('# '):
                 pdf.set_font("helvetica", style="B", size=16)
                 pdf.multi_cell(0, 10, text=line[2:])
@@ -674,7 +588,6 @@ class MediaUtils:
                 pdf.multi_cell(0, 8, text=f"• {line[2:]}")
             else:
                 pdf.multi_cell(0, 8, text=line)
-
         bio = io.BytesIO(pdf.output())
         return bio
 
@@ -688,91 +601,62 @@ class MediaUtils:
                 return text[:25] + "..." if len(text) > 25 else (text if text else "Obrolan Baru")
         return "Obrolan Baru"
 
-    # ===========================================
-    # PENTING: PEMBACAAN WEBSITE ANTI-BLOKIR
-    # Metode: Jina Reader (r.jina.ai) → AllOrigins → Request langsung
-    # ===========================================
     @staticmethod
     def _ambil_via_jina(url: str) -> Optional[str]:
-        """Pakai Jina Reader: konversi web apa pun jadi markdown bersih."""
         try:
             r = HTTP.get(f"https://r.jina.ai/{url}", timeout=25)
             if r.status_code == 200 and len(r.text) > 200:
-                # Bersihkan header Jina
                 teks = r.text
                 for prefix in ["Title:", "URL Source:", "Markdown Content:", "Published Time:"]:
                     idx = teks.find(prefix)
                     if idx != -1:
                         nl = teks.find("\n", idx)
-                        if nl != -1:
-                            teks = teks[:idx] + teks[nl + 1:]
-                teks = re.sub(r'!\[.*?\]\(.*?\)', '', teks)  # buang gambar inline
-                teks = re.sub(r'\[([^\]]+)\]\((.*?)\)', r'\1 (\2)', teks)  # tampilkan URL
+                        if nl != -1: teks = teks[:idx] + teks[nl + 1:]
+                teks = re.sub(r'!\[.*?\]\(.*?\)', '', teks)
+                teks = re.sub(r'\[([^\]]+)\]\((.*?)\)', r'\1 (\2)', teks)
                 return teks[:15000].strip()
-        except Exception:
-            pass
+        except: pass
         return None
 
     @staticmethod
     def _ambil_via_allorigins(url: str) -> Optional[str]:
-        """Proxy CORS untuk bypass Cloudflare ringan."""
         try:
             r = HTTP.get(f"https://api.allorigins.win/raw?url={quote(url, safe='')}", timeout=20)
-            if r.status_code == 200 and len(r.text) > 200:
-                return r.text
-        except Exception:
-            pass
+            if r.status_code == 200 and len(r.text) > 200: return r.text
+        except: pass
         return None
 
     @staticmethod
     def _ambil_langsung(url: str) -> Optional[str]:
         try:
             r = HTTP.get(url, timeout=15, allow_redirects=True)
-            if r.status_code in [403, 401, 406, 429]:
-                return None
+            if r.status_code in [403, 401, 406, 429]: return None
             r.raise_for_status()
             return r.text
-        except Exception:
-            return None
+        except: return None
 
     @staticmethod
     def _ekstrak_konten_bersih(html: str, url_asal: str) -> str:
-        """Ambil artikel utama saja, buang header/nav/footer/script."""
         soup = BeautifulSoup(html, 'html.parser')
-
-        # Buang elemen non-konten
-        for el in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript',
-                        '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]']):
+        for el in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript']):
             el.decompose()
-
-        # Prioritas selector artikel
         main_el = None
-        for sel in ['article', 'main', '[role="main"]', '.post', '.article', '.content', '.entry-content']:
+        for sel in ['article', 'main', '[role="main"]', '.post', '.article', '.content']:
             main_el = soup.select_one(sel)
-            if main_el and len(main_el.get_text(strip=True)) > 200:
-                break
-        if not main_el:
-            main_el = soup.body or soup
-
-        # Kumpulkan gambar berguna
+            if main_el and len(main_el.get_text(strip=True)) > 200: break
+        if not main_el: main_el = soup.body or soup
         daftar_gambar = []
         for img in main_el.find_all('img'):
             src = img.get('src') or img.get('data-src')
-            if not src:
-                continue
+            if not src: continue
             src = urljoin(url_asal, src)
-            if any(ext in src.lower() for ext in ['.svg', 'icon', 'logo', 'avatar', 'pixel', 'tracking']):
-                continue
+            if any(ext in src.lower() for ext in ['.svg', 'icon', 'logo', 'avatar']): continue
             alt = img.get('alt', '').strip() or "Gambar"
-            if len(daftar_gambar) < 10:
-                daftar_gambar.append(f"- ![{alt}]({src})")
-
-        # Ambil paragraf dan heading
+            if len(daftar_gambar) < 10: daftar_gambar.append(f"- ![{alt}]({src})")
         teks_bagian = []
-        for el in main_el.find_all(['h1', 'h2', 'h3', 'h4', 'p', 'li', 'blockquote', 'table']):
+        for el in main_el.find_all(['h1', 'h2', 'h3', 'h4', 'p', 'li', 'blockquote']):
             t = el.get_text(' ', strip=True)
-            if not t or len(t) < 3:
-                continue
+            if not t or len(t) < 3: continue
             if el.name.startswith('h'):
                 level = '#' * int(el.name[1])
                 teks_bagian.append(f"{level} {t}")
@@ -780,66 +664,43 @@ class MediaUtils:
                 teks_bagian.append(f"- {t}")
             else:
                 teks_bagian.append(t)
-
         hasil = "\n\n".join(teks_bagian)[:12000].strip()
-        if daftar_gambar:
-            hasil += "\n\n[GAMBAR DI HALAMAN:]\n" + "\n".join(daftar_gambar)
+        if daftar_gambar: hasil += "\n\n[GAMBAR DI HALAMAN:]\n" + "\n".join(daftar_gambar)
         return hasil
 
     @staticmethod
     def ambil_teks_dari_link(url: str) -> str:
         try:
-            if not url.startswith('http'):
-                url = 'https://' + url
-
-            # Fallback berjenjang
+            if not url.startswith('http'): url = 'https://' + url
             html = MediaUtils._ambil_via_jina(url)
-            if html:
-                # Jina sudah mengembalikan markdown bersih
-                return f"[ISI HALAMAN: {url}]\n{html[:12000]}"
-
+            if html: return f"[ISI HALAMAN: {url}]\n{html[:12000]}"
             html = MediaUtils._ambil_langsung(url)
-            if not html:
-                html = MediaUtils._ambil_via_allorigins(url)
-
-            if not html:
-                return f"Pesan Sistem: Gagal mengakses {url}. Website mungkin diblokir (anti-bot/Cloudflare). Coba URL lain dari hasil pencarian."
-
-            if len(html) < 200:
-                return f"Pesan Sistem: {url} mengembalikan halaman kosong atau sangat pendek."
-
+            if not html: html = MediaUtils._ambil_via_allorigins(url)
+            if not html: return f"Pesan Sistem: Gagal akses {url}. Website mungkin diblokir."
+            if len(html) < 200: return f"Pesan Sistem: {url} kosong."
             konten = MediaUtils._ekstrak_konten_bersih(html, url)
             if not konten or len(konten) < 100:
-                # Terakhir: ambil semua teks apa adanya
                 soup = BeautifulSoup(html, 'html.parser')
-                for s in soup(['script', 'style']):
-                    s.decompose()
+                for s in soup(['script', 'style']): s.decompose()
                 konten = soup.get_text(' | ', strip=True)[:12000]
-
-            if not konten:
-                return f"Pesan Sistem: {url} tidak memiliki konten teks (kemungkinan SPA/JavaScript penuh)."
-
+            if not konten: return f"Pesan Sistem: {url} tidak ada teks (SPA/JS penuh)."
             return f"[ISI HALAMAN: {url}]\n{konten}"
         except Exception as e:
             return f"Error Link {url}: {str(e)}"
 
     @staticmethod
     def ekstrak_kode_html(teks: str) -> Optional[str]:
-        if not teks:
-            return None
+        if not teks: return None
         match = re.search(r'`{3}html\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         return match.group(1) if match else None
 
     @staticmethod
     def ekstrak_json_ppt(teks: str) -> Optional[dict]:
-        if not teks:
-            return None
+        if not teks: return None
         match = re.search(r'`{3}json\n(.*?)\n`{3}', teks, re.DOTALL | re.IGNORECASE)
         if match:
-            try:
-                return json.loads(match.group(1))
-            except:
-                pass
+            try: return json.loads(match.group(1))
+            except: pass
         return None
 
     @staticmethod
@@ -848,9 +709,7 @@ class MediaUtils:
         tema_pilihan = data_json.get("rekomendasi_tema", "bisnis").lower()
         peta = {"bisnis": "tema_bisnis.pptx", "kreatif": "tema_kreatif.pptx", "akademik": "tema_akademik.pptx", "gelap": "tema_gelap.pptx"}
         file_template = peta.get(tema_pilihan, "tema_bisnis.pptx")
-
         prs = Presentation(file_template) if os.path.exists(file_template) else Presentation()
-
         for slide_data in data_json.get("slides", []):
             stype = slide_data.get("slide_type", "content")
             if stype == "title":
@@ -858,8 +717,7 @@ class MediaUtils:
                 try:
                     slide.shapes.title.text = slide_data.get("title", "")
                     slide.placeholders[1].text = slide_data.get("content", "")
-                except:
-                    pass
+                except: pass
             else:
                 slide = prs.slides.add_slide(prs.slide_layouts[1])
                 try:
@@ -868,15 +726,10 @@ class MediaUtils:
                     content = slide_data.get("content", [])
                     if isinstance(content, list):
                         for i, poin in enumerate(content):
-                            if i == 0:
-                                tf.text = poin
-                            else:
-                                tf.add_paragraph().text = poin
-                    else:
-                        tf.text = str(content)
-                except:
-                    pass
-
+                            if i == 0: tf.text = poin
+                            else: tf.add_paragraph().text = poin
+                    else: tf.text = str(content)
+                except: pass
         bio = io.BytesIO()
         prs.save(bio)
         bio.seek(0)
@@ -892,48 +745,128 @@ class MarketUtils:
                     simbol_ticker = f"{simbol_ticker.upper()}-USD"
             ticker = yf.Ticker(simbol_ticker)
             hist = ticker.history(period="5d")
-            if hist.empty:
-                return f"Pesan Sistem: Data pasar '{simbol_ticker}' tidak ditemukan. Mohon beritahu pengguna."
+            if hist.empty: return f"Pesan Sistem: Data '{simbol_ticker}' tidak ditemukan."
             data_str = hist[['Open', 'High', 'Low', 'Close', 'Volume']].to_string()
             return f"Data 5 Hari Terakhir {simbol_ticker}:\n{data_str}"
-        except Exception as e:
-            return f"Gagal mengambil data dari API: {str(e)}"
+        except Exception as e: return f"Gagal: {str(e)}"
 
 
 # ==========================================
-# 4. KOMPONEN UI & TAMPILAN
+# 4. KOMPONEN UI BARU (PROFESIONAL)
 # ==========================================
 def inject_custom_css():
     st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
-            html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-            #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-            .header-title { text-align: center; font-size: 2.2rem; font-weight: 700; background: linear-gradient(90deg, #7d4eff, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0px; padding-top: 10px; }
-            .header-subtitle { text-align: center; color: var(--text-color); opacity: 0.7; font-size: 0.95rem; font-weight: 300; margin-bottom: 30px; }
-            .stChatMessage:nth-child(even) { background-color: var(--secondary-background-color) !important; border-radius: 12px; padding: 1rem; }
-            .file-pill { display: inline-block; background: var(--secondary-background-color); color: var(--text-color); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; margin-right: 8px; margin-bottom: 12px; border: 1px solid var(--border-color); }
-            .agent-thought { font-size: 0.85rem; color: #888; font-style: italic; border-left: 2px solid #7d4eff; padding-left: 10px; margin-bottom: 10px;}
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
-            [data-testid="stSidebar"] { background-color: var(--secondary-background-color); }
-            [data-testid="stSidebarNav"] {display: none;}
-            [data-testid="stSidebar"] .stButton > button {
-                border: none !important; background-color: transparent !important;
-                border-radius: 24px !important; padding: 0.25rem 0.75rem !important;
-                height: 2.5rem !important; min-height: 2.5rem !important;
-                display: flex; justify-content: flex-start; align-items: center;
-                width: 100%; box-shadow: none !important;
-            }
-            [data-testid="stSidebar"] .stButton > button:hover { background-color: rgba(125, 125, 125, 0.15) !important; }
-            [data-testid="stSidebar"] .stButton > button[kind="primary"] { background-color: rgba(125, 78, 255, 0.15) !important; color: #7d4eff !important; font-weight: 600 !important; }
-            [data-testid="stSidebar"] .stButton > button p {
-                white-space: nowrap !important; overflow: hidden !important;
-                text-overflow: ellipsis !important; margin: 0 !important;
-                text-align: left !important; width: 100% !important; display: block !important;
-            }
-            [data-testid="stHorizontalBlock"] { gap: 0 !important; }
-        </style>
+    :root{
+      --bg:#0b0e14; --surface:#10141f; --card:#141927; --input:#151a28;
+      --border:rgba(255,255,255,.07); --text:#e8ecf4; --muted:#8b93a7;
+      --acc1:#7c5cff; --acc2:#22d3ee;
+      --grad:linear-gradient(135deg,#7c5cff 0%,#22d3ee 100%);
+    }
+
+    html,body,[data-testid="stAppViewContainer"],section.main{background:var(--bg) !important;}
+    html,body,[class*="css"]{font-family:'Plus Jakarta Sans',sans-serif;}
+    h1,h2,h3{font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif;}
+    #MainMenu,footer{visibility:hidden;}
+    header[data-testid="stHeader"]{background:transparent;}
+
+    ::-webkit-scrollbar{width:8px;height:8px;}
+    ::-webkit-scrollbar-thumb{background:#2a3145;border-radius:8px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+    /* ===== BRAND BAR ===== */
+    .brand-bar{display:flex;justify-content:space-between;align-items:center;padding:4px 2px 20px;animation:fadeUp .5s ease;}
+    .brand-logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;color:#fff;}
+    .brand-logo .dot{width:36px;height:36px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 20px rgba(124,92,255,.45);}
+    .status-pill{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:.75rem;font-weight:700;}
+    .status-pill .pulse{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 1.4s infinite;}
+
+    /* ===== HERO LOGIN ===== */
+    .hero{text-align:center;padding:30px 0 10px;animation:fadeUp .6s ease;}
+    .hero-badge{display:inline-block;padding:6px 16px;border-radius:999px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.35);color:#b7a6ff;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;}
+    .hero-title{font-size:2.6rem;font-weight:800;color:#fff;margin:0;}
+    .hero-title span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    .hero-sub{color:var(--muted);font-size:.95rem;max-width:440px;margin:10px auto 26px;}
+
+    /* ===== SIDEBAR ===== */
+    [data-testid="stSidebar"]{background:var(--surface) !important;border-right:1px solid var(--border);}
+    .profile-card{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;background:linear-gradient(145deg,rgba(124,92,255,.14),rgba(34,211,238,.07));border:1px solid rgba(124,92,255,.3);margin-bottom:8px;}
+    .profile-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--grad);color:#fff;font-weight:800;font-size:1.1rem;flex-shrink:0;}
+    .profile-name{color:#fff;font-weight:700;font-size:.95rem;}
+    .profile-role{color:var(--muted);font-size:.72rem;letter-spacing:.04em;}
+    .side-label{font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:16px 0 8px;}
+
+    [data-testid="stSidebar"] .stButton>button{background:transparent !important;border:none !important;border-radius:12px !important;color:var(--text) !important;justify-content:flex-start;box-shadow:none !important;}
+    [data-testid="stSidebar"] .stButton>button:hover{background:rgba(255,255,255,.06) !important;}
+    [data-testid="stSidebar"] .stButton>button[kind="primary"]{background:rgba(124,92,255,.16) !important;color:#b7a6ff !important;font-weight:700 !important;}
+    [data-testid="stSidebar"] .stButton>button p{white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;text-align:left !important;}
+
+    /* ===== TOMBOL UMUM ===== */
+    .stButton>button{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:12px;font-weight:600;}
+    .stButton>button:hover{border-color:rgba(124,92,255,.5);}
+    .stButton>button[kind="primary"]{background:var(--grad) !important;border:none !important;color:#fff !important;font-weight:700;box-shadow:0 6px 22px rgba(124,92,255,.35);}
+    .stDownloadButton>button{background:var(--grad) !important;border:none !important;color:#fff !important;border-radius:12px;font-weight:700;}
+
+    /* ===== INPUT & FORM ===== */
+    .stTextInput input,.stTextInput>div>input{background:var(--input) !important;border:1px solid var(--border) !important;border-radius:12px;color:var(--text);}
+    .stTabs [data-testid="stTabsSelectionBar"]{background:var(--grad);height:2px;}
+    .stTabs button{color:var(--muted);font-weight:700;}
+    .stTabs button[aria-selected="true"]{color:#fff;}
+
+    /* ===== CHAT BUBBLES ===== */
+    [data-testid="stChatMessage"]{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 18px;margin-bottom:12px;animation:fadeUp .45s ease both;}
+    .user-bubble{display:flex;justify-content:flex-end;margin:14px 0;animation:fadeUp .45s ease both;}
+    .user-bubble .inner{max-width:82%;padding:12px 20px;border-radius:18px 18px 4px 18px;background:linear-gradient(135deg,#7c5cff,#5a3df0);color:#fff;box-shadow:0 6px 24px rgba(124,92,255,.35);white-space:pre-wrap;line-height:1.5;}
+
+    .agent-chip{display:inline-flex;align-items:center;gap:8px;margin:2px 10px 2px 0;padding:6px 14px;border-radius:999px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);color:#7dd8ea;font-size:.73rem;font-weight:700;animation:fadeUp .4s ease both;}
+    .agent-chip .pulse{width:6px;height:6px;border-radius:50%;background:#22d3ee;animation:pulse 1.2s infinite;}
+
+    [data-testid="stChatInput"] textarea{background:var(--input) !important;border:1px solid var(--border) !important;border-radius:999px !important;padding:14px 20px !important;box-shadow:none !important;color:var(--text);}
+    [data-testid="stChatInput"] textarea:focus{border-color:transparent !important;box-shadow:0 0 0 2px rgba(124,92,255,.6) !important;}
+
+    pre,.stCodeBlock{background:#0f1320 !important;border:1px solid var(--border);border-radius:12px;}
+
+    /* ===== INFO BOX ===== */
+    .stAlert{border-radius:12px !important;border:1px solid var(--border) !important;}
+    </style>
     """, unsafe_allow_html=True)
+
+
+def render_brand_bar():
+    st.markdown("""
+    <div class="brand-bar">
+      <div class="brand-logo"><span class="dot">🤖</span> Lagøs <span style="color:#8b93a7;font-weight:500;">AI</span></div>
+      <div class="status-pill"><span class="pulse"></span> Sistem Aktif</div>
+    </div>""", unsafe_allow_html=True)
+
+
+def render_profile_card(username):
+    initial = username[0].upper() if username else "?"
+    st.markdown(f"""
+    <div class="profile-card">
+      <div class="profile-avatar">{html_escape(initial)}</div>
+      <div><div class="profile-name">{html_escape(username)}</div>
+      <div class="profile-role">ANALYST • AKTIF</div></div>
+    </div>""", unsafe_allow_html=True)
+
+
+def render_agent_chip(nama):
+    st.markdown(f'<div class="agent-chip"><span class="pulse"></span> ⚙️ {html_escape(nama)}</div>', unsafe_allow_html=True)
+
+
+def render_hero_login():
+    st.markdown("""
+    <div class="hero">
+      <div class="hero-badge">✦ Sistem Analitik Otonom</div>
+      <h1 class="hero-title">Lagøs <span>AI Agent</span></h1>
+      <p class="hero-sub">Riset web multi-sumber, analisis pasar, dan otomatisasi dokumen — dalam satu percakapan.</p>
+    </div>""", unsafe_allow_html=True)
+
 
 def inject_auto_scroll():
     components.html("""
@@ -946,15 +879,16 @@ def inject_auto_scroll():
         </script>
     """, height=0)
 
+
 @st.dialog("🌐 Web App Preview", width="large")
 def render_webapp_modal(html_code: str):
     st.info("💡 Interaksi dengan Web App di bawah ini.")
     injection = "<base target='_blank'><script>document.addEventListener('click', function(e) { var t = e.target.closest('a'); if(t && t.href) { t.setAttribute('target', '_blank'); } });</script>"
     if re.search(r'<head[^>]*>', html_code, re.IGNORECASE):
         html_code = re.sub(r'(<head[^>]*>)', r'\1\n' + injection, html_code, count=1, flags=re.IGNORECASE)
-    else:
-        html_code = injection + "\n" + html_code
+    else: html_code = injection + "\n" + html_code
     components.html(html_code, height=600, scrolling=True)
+
 
 def init_session_state():
     defaults = {
@@ -964,30 +898,23 @@ def init_session_state():
         "token_usage": 0
     }
     for key, val in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = val
+        if key not in st.session_state: st.session_state[key] = val
 
-# ==========================================
-# PENTING: Regex URL yang tidak agresif
-# Tidak match "file.docx" atau ekstensi file lokal
-# ==========================================
+
 URL_REGEX = re.compile(
-    r'https?://[^\s<>\\"\'\)\]]+'  # harus ada http(s)
+    r'https?://[^\s<>\\"\'\)\]]+'
     r'|'
     r'\b(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|id|co|io|ai|info|gov|edu)\b[^\s<>\\"\'\)\]]*',
     re.IGNORECASE
 )
 
-# Daftar ekstensi file yang BUKAN URL
 FILE_EXT_SKIP = {'.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls', '.txt', '.csv',
                  '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif', '.mp4', '.mp3',
                  '.mov', '.exe', '.apk', '.iso', '.dmg'}
 
 def _apakah_url_valid(url: str) -> bool:
     u = url.lower()
-    if any(u.endswith(ext) for ext in FILE_EXT_SKIP):
-        return False
-    # minimal ada titik + path/host
+    if any(u.endswith(ext) for ext in FILE_EXT_SKIP): return False
     return '.' in url and len(url) > 7
 
 
@@ -1018,8 +945,9 @@ def main():
         cookie_manager.set("saved_username", st.session_state.username, expires_at=expire_date, key="set_user_cookie")
         st.session_state.set_cookie = False
 
+    # ========== HALAMAN LOGIN ==========
     if not st.session_state.logged_in:
-        st.markdown('<div class="header-title">🤖 Lagøs AI Agent</div>', unsafe_allow_html=True)
+        render_hero_login()
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             with st.container(border=True):
@@ -1033,26 +961,22 @@ def main():
                             st.session_state.username = log_user
                             st.session_state.set_cookie = True
                             st.rerun()
-                        else:
-                            st.error("Username atau password salah!")
+                        else: st.error("Username atau password salah!")
                 with tab_register:
                     reg_user = st.text_input("Username Baru", key="reg_user")
                     reg_pass = st.text_input("Password Baru", type="password", key="reg_pass")
                     if st.button("Daftar & Buat Akun", use_container_width=True):
                         if reg_user and reg_pass:
-                            if DatabaseManager.register_user(reg_user, reg_pass):
-                                st.success("✅ Berhasil mendaftar!")
-                            else:
-                                st.error("❌ Username sudah dipakai.")
-                        else:
-                            st.warning("⚠️ Harap isi data!")
+                            if DatabaseManager.register_user(reg_user, reg_pass): st.success("✅ Berhasil mendaftar!")
+                            else: st.error("❌ Username sudah dipakai.")
+                        else: st.warning("⚠️ Harap isi data!")
         st.stop()
 
-    st.markdown('<div class="header-title">🤖 Lagøs AI Agent</div>', unsafe_allow_html=True)
-    st.markdown('<div class="header-subtitle">Sistem Analitik Otonom</div>', unsafe_allow_html=True)
+    # ========== APLIKASI UTAMA ==========
+    render_brand_bar()
 
     with st.sidebar:
-        st.success(f"👤 Login sebagai: **{st.session_state.username}**")
+        render_profile_card(st.session_state.username)
         st.divider()
 
         if st.button("➕ Chat Baru", use_container_width=True, type="primary"):
@@ -1070,7 +994,7 @@ def main():
             else:
                 st.toast("Tidak ada obrolan aktif yang bisa dihapus.")
 
-        st.markdown("### 🗂️ Riwayat")
+        st.markdown('<div class="side-label">Riwayat Percakapan</div>', unsafe_allow_html=True)
         sessions = DatabaseManager.get_user_sessions(st.session_state.username)
 
         if sessions:
@@ -1084,12 +1008,12 @@ def main():
                         st.rerun()
 
         st.divider()
-        st.markdown("### 🧠 Pilih Model AI")
+        st.markdown('<div class="side-label">Model AI</div>', unsafe_allow_html=True)
         selected_model = st.selectbox("Pilih model aktif:", list(MODEL_MAPPING.keys()),
                                        format_func=lambda x: MODEL_MAPPING[x], label_visibility="collapsed")
 
         st.divider()
-        st.markdown("### 📊 Statistik Sesi Ini")
+        st.markdown('<div class="side-label">Statistik Sesi</div>', unsafe_allow_html=True)
         st.info(f"🪙 Est. Token Dipakai: **{st.session_state.token_usage:,}**")
 
         if len(st.session_state.messages) > 1:
@@ -1107,22 +1031,25 @@ def main():
             st.session_state.del_cookie = True
             st.rerun()
 
+    # ========== TAMPILAN PESAN ==========
     for idx, message in enumerate(st.session_state.messages):
-        if message["role"] in ["system", "tool"]:
-            continue
+        if message["role"] in ["system", "tool"]: continue
 
         if message["role"] == "assistant" and message.get("content") is None and message.get("tool_calls"):
             for t_call in message["tool_calls"]:
-                nama_fungsi = t_call.get("function", {}).get("name", "Unknown Tool")
-                st.markdown(f"<div class='agent-thought'>⚙️ Agent memanggil alat: {nama_fungsi}</div>", unsafe_allow_html=True)
+                render_agent_chip(t_call.get("function", {}).get("name", "alat"))
             continue
 
-        with st.chat_message(message["role"]):
-            content = message.get("content", "")
-            if not content:
-                continue
+        content = message.get("content", "")
+        if not content: continue
 
-            text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+        text_disp = next((item["text"] for item in content if item["type"] == "text"), "") if isinstance(content, list) else str(content)
+
+        if message["role"] == "user":
+            st.markdown(f'<div class="user-bubble"><div class="inner">{html_escape(text_disp)}</div></div>', unsafe_allow_html=True)
+            continue
+
+        with st.chat_message("assistant"):
             st.markdown(text_disp)
 
             if message["role"] == "assistant":
@@ -1163,6 +1090,7 @@ def main():
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
+    # ========== INPUT PESAN ==========
     with st.container():
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"):
@@ -1195,24 +1123,20 @@ def main():
     if prompt:
         client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
+        with st.chat_message("user"): st.markdown(prompt)
         teks_tambahan = ""
 
         if st.session_state.temp_doc:
             teks_dok = MediaUtils.ekstrak_teks_dari_dokumen(st.session_state.temp_doc)
-            if teks_dok:
-                teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMUMEN]\n"
+            if teks_dok: teks_tambahan += f"\n[KONTEN DOKUMEN: {st.session_state.temp_doc.name}]\n{teks_dok}\n[AKHIR DOKUMEN]\n"
 
-        # Deteksi URL hanya jika benar-benar terlihat seperti URL
         semua_url = []
         for m in URL_REGEX.finditer(prompt):
             u = m.group(0).rstrip('.,;:!?)')
             if _apakah_url_valid(u) and u not in semua_url:
                 semua_url.append(u)
 
-        for url in semua_url[:3]:  # maks 3 URL auto-fetch
+        for url in semua_url[:3]:
             teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
 
         if st.session_state.temp_image:
@@ -1228,7 +1152,6 @@ def main():
             st.session_state.messages.append({"role": "user", "content": prompt})
 
         payload_khusus_api = copy.deepcopy(st.session_state.messages)
-
         final_prompt_api = f"{teks_tambahan}\n\nPertanyaan/Instruksi Pengguna:\n{prompt}" if teks_tambahan else prompt
 
         if isinstance(payload_khusus_api[-1]["content"], list):
@@ -1236,10 +1159,7 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ====================================================
-        # AGENT LOOP MULTI-RONDE (maks 3 ronde tool calling)
-        # Inilah yang bikin AI "pintar browsing"
-        # ====================================================
+        # ========== AGENT LOOP MULTI-RONDE ==========
         MAX_AGENT_LOOPS = 3
 
         for loop_idx in range(MAX_AGENT_LOOPS):
@@ -1255,9 +1175,7 @@ def main():
 
                 response_message = agent_response.choices[0].message
 
-                # Jika tidak ada tool_calls, agent siap menjawab → keluar loop
                 if not response_message.tool_calls:
-                    # Masukkan teks sementara, nanti streaming akan overwrite
                     if response_message.content:
                         st.session_state.messages.append({
                             "role": "assistant",
@@ -1265,7 +1183,6 @@ def main():
                         })
                     break
 
-                # Ada tool_calls → jalankan tool, lanjut ke ronde berikutnya
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": response_message.content or None,
@@ -1292,45 +1209,36 @@ def main():
 
                 for t_call in response_message.tool_calls:
                     nama_fungsi = t_call.function.name
-                    st.markdown(f"<div class='agent-thought'>⚙️ Agent memanggil: {nama_fungsi}</div>",
-                                 unsafe_allow_html=True)
+                    render_agent_chip(nama_fungsi)
 
                 for tool_call in response_message.tool_calls:
                     func_name = tool_call.function.name
-                    try:
-                        func_args = json.loads(tool_call.function.arguments)
-                    except:
-                        func_args = {}
+                    try: func_args = json.loads(tool_call.function.arguments)
+                    except: func_args = {}
 
                     hasil_fungsi = "Error: Alat tidak dikenali."
 
                     if func_name == "ambil_data_pasar":
                         st.info(f"📈 Menganalisis pasar untuk {func_args.get('simbol_ticker', '')}...")
                         hasil_fungsi = MarketUtils.ambil_data_pasar(func_args.get("simbol_ticker", ""))
-
                     elif func_name == "cari_informasi_web":
                         query = func_args.get("query", "")
-                        st.info(f"🔍 Mencari di internet: '{query}'...")
+                        st.info(f"🔍 Mencari: '{query}'...")
                         hasil_fungsi = AgentTools.cari_informasi_web(query)
-
                     elif func_name == "baca_isi_website":
                         url = func_args.get("url", "")
                         st.info(f"🌐 Membaca situs: {url}...")
                         hasil_fungsi = MediaUtils.ambil_teks_dari_link(url)
-
                     elif func_name == "cari_gambar":
                         st.info(f"🖼️ Mencari foto: '{func_args.get('query', '')}'...")
                         hasil_fungsi = AgentTools.cari_gambar(func_args.get("query", ""))
-
                     elif func_name == "ambil_transkrip_youtube":
                         yt_url = func_args.get("video_url", "")
                         st.info(f"🎬 Ekstrak transkrip: {yt_url}...")
                         hasil_fungsi = AgentTools.ambil_transkrip_youtube(yt_url)
-
                     elif func_name == "eksekusi_python":
                         st.info(f"🐍 Menjalankan skrip Python...")
                         hasil_fungsi = AgentTools.eksekusi_python(func_args.get("kode", ""))
-
                     elif func_name == "hitung_matematika":
                         st.info(f"🧮 Menghitung: {func_args.get('ekspresi', '')}...")
                         hasil_fungsi = AgentTools.hitung_matematika(func_args.get("ekspresi", ""))
@@ -1350,10 +1258,7 @@ def main():
                 st.error(f"Error pada loop agent: {str(e)}")
                 break
 
-        # ====================================================
-        # STREAMING JAWABAN AKHIR
-        # ====================================================
-        # Hapus pesan assistant sementara (kalau ada dari loop terakhir) sebelum streaming
+        # ========== STREAMING JAWABAN ==========
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant" \
                 and "tool_calls" not in st.session_state.messages[-1]:
             st.session_state.messages.pop()
