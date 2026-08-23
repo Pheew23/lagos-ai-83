@@ -857,6 +857,9 @@ def bersihkan_teks_response(teks):
     if not teks:
         return ""
     teks = re.sub(r'<atem:.*?(</atem:function_calls>|$)', '', teks, flags=re.DOTALL)
+    teks = re.sub(r'<function_calls>.*?(</function_calls>|$)', '', teks, flags=re.DOTALL)
+    teks = re.sub(r'<invoke.*?(</invoke>|$)', '', teks, flags=re.DOTALL)
+    teks = re.sub(r'\bto=[a-zA-Z_]+', '', teks)
     teks = re.sub(r'<\|[^|]*\|>', '', teks)
     return teks.strip()
 
@@ -1031,10 +1034,11 @@ def main():
             st.session_state.del_cookie = True
             st.rerun()
 
+    # ========== TAMPILAN PESAN ==========
     for idx, message in enumerate(st.session_state.messages):
         if message["role"] in ["system", "tool"]: continue
 
-        if message["role"] == "assistant" and message.get("content") is None and message.get("tool_calls"):
+        if message["role"] == "assistant" and message.get("tool_calls"):
             for t_call in message["tool_calls"]:
                 render_agent_chip(t_call.get("function", {}).get("name", "alat"))
             continue
@@ -1089,6 +1093,7 @@ def main():
     st.markdown("<div id='bottom-marker'></div>", unsafe_allow_html=True)
     inject_auto_scroll()
 
+    # ========== INPUT PESAN ==========
     with st.container():
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"):
@@ -1183,7 +1188,7 @@ def main():
 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": response_message.content or None,
+                    "content": None,
                     "tool_calls": [
                         {
                             "id": tc.id,
@@ -1195,7 +1200,7 @@ def main():
 
                 payload_khusus_api.append({
                     "role": "assistant",
-                    "content": response_message.content or None,
+                    "content": None,
                     "tool_calls": [
                         {
                             "id": tc.id,
@@ -1294,6 +1299,8 @@ def main():
                             placeholder.markdown(bersihkan_teks_response(full_response) + "▌")
 
                 full_response = bersihkan_teks_response(full_response)
+                if not full_response:
+                    full_response = "Maaf, model AI sedang tidak stabil. Silakan ulangi pertanyaan Anda. 🙏"
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
