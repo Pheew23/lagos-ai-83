@@ -517,14 +517,28 @@ class AgentTools:
             sys.stdout = old_stdout
 
     # ---------- KALKULATOR ----------
-        @staticmethod
+    @staticmethod
+    def eksekusi_python(kode: str) -> str:
+        import sys
+        old_stdout = sys.stdout
+        redirected_output = io.StringIO()
+        try:
+            sys.stdout = redirected_output
+            local_scope = {}
+            exec(kode, {}, local_scope)
+            output = redirected_output.getvalue()
+            return f"Hasil Output Terminal:\n{output}" if output else f"Eksekusi Sukses. Variabel: {local_scope}"
+        except Exception as e:
+            return f"Error saat menjalankan kode Python: {str(e)}"
+        finally:
+            sys.stdout = old_stdout
+
+    @staticmethod
     def hitung_matematika(ekspresi: str) -> str:
         try:
-            # Hanya izinkan angka, operator dasar, titik, dan spasi
             ekspresi = ekspresi.replace(",", ".")
             if not re.match(r'^[\d+\-*/().%\s]+$', ekspresi):
                 return "Pesan Sistem: Ekspresi mengandung karakter tidak aman."
-            # Batasi panjang agar tidak dieksploitasi
             if len(ekspresi) > 200:
                 return "Pesan Sistem: Ekspresi terlalu panjang."
             hasil = eval(ekspresi, {"__builtins__": {}}, {})
