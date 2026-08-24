@@ -178,11 +178,10 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
 1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
-2. Jika hasil pencarian tidak relevan, ULANGI pencarian dengan kata kunci berbeda (MAKSIMAL 2 kali percobaan). Jika tetap tidak ditemukan, jawab "Informasi tidak ditemukan".
+2. DILARANG mencari hal yang sama lebih dari 2 kali. Jika hasil tidak ada, jawab "Informasi tidak ditemukan".
 3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
-4. Anda BOLEH memanggil beberapa alat berurutan.
-5. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
-6. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan". JANGAN MENGARANG.
+4. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
+5. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan". JANGAN MENGARANG.
 
 ATURAN MERANGKUM VIDEO (PENTING):
 1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
@@ -864,6 +863,16 @@ def bersihkan_teks_response(teks):
     return teks.strip()
 
 
+def apakah_jawaban_rusak(teks):
+    if not teks:
+        return True
+    if re.search(r'(to=|atem:|function_calls|<\||<invoke)', teks, re.I):
+        return True
+    if teks.strip().lower() in ("assistant", "user", "system", "assistant to"):
+        return True
+    return False
+
+
 def render_hero_login():
     st.markdown("""
     <div class="hero">
@@ -1162,8 +1171,10 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ========== AGENT LOOP MULTI-RONDE ==========
-        MAX_AGENT_LOOPS = 3
+        # ========== AGENT LOOP (DIBATASI ANTI-SPAM) ==========
+        MAX_AGENT_LOOPS = 2
+        hasil_tool_semua = []
+        query_sudah_dicari = set()
 
         for loop_idx in range(MAX_AGENT_LOOPS):
             try:
@@ -1186,6 +1197,8 @@ def main():
                         })
                     break
 
+                tc_list = response_message.tool_calls[:2]
+
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": None,
@@ -1194,7 +1207,7 @@ def main():
                             "id": tc.id,
                             "type": tc.type,
                             "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in response_message.tool_calls
+                        } for tc in tc_list
                     ]
                 })
 
@@ -1206,14 +1219,14 @@ def main():
                             "id": tc.id,
                             "type": tc.type,
                             "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in response_message.tool_calls
+                        } for tc in tc_list
                     ]
                 })
 
-                for t_call in response_message.tool_calls:
+                for t_call in tc_list:
                     render_agent_chip(t_call.function.name)
 
-                for tool_call in response_message.tool_calls:
+                for tool_call in tc_list:
                     func_name = tool_call.function.name
                     try: func_args = json.loads(tool_call.function.arguments)
                     except: func_args = {}
@@ -1224,9 +1237,14 @@ def main():
                         st.info(f"📈 Menganalisis pasar untuk {func_args.get('simbol_ticker', '')}...")
                         hasil_fungsi = MarketUtils.ambil_data_pasar(func_args.get("simbol_ticker", ""))
                     elif func_name == "cari_informasi_web":
-                        query = func_args.get("query", "")
-                        st.info(f"🔍 Mencari: '{query}'...")
-                        hasil_fungsi = AgentTools.cari_informasi_web(query)
+                        query_asli = func_args.get("query", "")
+                        query_key = query_asli.strip().lower()
+                        if query_key in query_sudah_dicari:
+                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari sebelumnya. JANGAN ulangi pencarian. Jawab sekarang berdasarkan hasil yang ada, atau katakan Informasi tidak ditemukan."
+                        else:
+                            query_sudah_dicari.add(query_key)
+                            st.info(f"🔍 Mencari: '{query_asli}'...")
+                            hasil_fungsi = AgentTools.cari_informasi_web(query_asli)
                     elif func_name == "baca_isi_website":
                         url = func_args.get("url", "")
                         st.info(f"🌐 Membaca situs: {url}...")
@@ -1244,6 +1262,8 @@ def main():
                     elif func_name == "hitung_matematika":
                         st.info(f"🧮 Menghitung: {func_args.get('ekspresi', '')}...")
                         hasil_fungsi = AgentTools.hitung_matematika(func_args.get("ekspresi", ""))
+
+                    hasil_tool_semua.append(str(hasil_fungsi))
 
                     tool_msg = {
                         "tool_call_id": tool_call.id,
@@ -1299,8 +1319,16 @@ def main():
                             placeholder.markdown(bersihkan_teks_response(full_response) + "▌")
 
                 full_response = bersihkan_teks_response(full_response)
-                if not full_response:
-                    full_response = "Maaf, model AI sedang tidak stabil. Silakan ulangi pertanyaan Anda. 🙏"
+
+                # FALLBACK: jika jawaban rusak, tampilkan temuan mentah
+                if apakah_jawaban_rusak(full_response):
+                    ringkasan = next((h for h in reversed(hasil_tool_semua) if h.startswith(
+                        ("HASIL PENCARIAN", "Transkrip", "Data 5 Hari", "Hasil", "Pesan Sistem: Foto", "[ISI HALAMAN")), None)
+                    if ringkasan:
+                        full_response = "🤖 Berikut temuan yang saya dapatkan:\n\n" + ringkasan[:4000]
+                    else:
+                        full_response = "Maaf, model AI sedang tidak stabil. Silakan ulangi pertanyaan Anda. 🙏"
+
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
