@@ -1254,7 +1254,7 @@ def main():
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
-                time.sleep(3)
+                time.sleep(4)
 
             except Exception as e:
                 st.error(f"Error pada loop agent: {str(e)}")
