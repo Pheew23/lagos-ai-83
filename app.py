@@ -59,7 +59,7 @@ def panggil_api_dengan_retry(client_instance, **kwargs):
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg and attempt < max_retries - 1:
-                jeda = 5 + (attempt * 5)
+                jeda = 8 + (attempt * 8)
                 st.toast(f"⏳ Menyesuaikan limit 40 RPM. Melanjutkan dalam {jeda} detik... ({attempt+1}/{max_retries})")
                 time.sleep(jeda)
             else:
@@ -1254,7 +1254,7 @@ def main():
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
-                time.sleep(2)
+                time.sleep(3)
 
             except Exception as e:
                 st.error(f"Error pada loop agent: {str(e)}")
