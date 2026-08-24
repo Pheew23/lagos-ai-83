@@ -1322,8 +1322,9 @@ def main():
 
                 # FALLBACK: jika jawaban rusak, tampilkan temuan mentah
                 if apakah_jawaban_rusak(full_response):
-                    ringkasan = next((h for h in reversed(hasil_tool_semua) if h.startswith()
-                        ("HASIL PENCARIAN", "Transkrip", "Data 5 Hari", "Hasil", "Pesan Sistem: Foto", "[ISI HALAMAN")), None)
+                    ringkasan = next((h for h in reversed(hasil_tool_semua) if h.startswith(
+                        ("HASIL PENCARIAN", "Transkrip", "Data 5 Hari", "Hasil", "Pesan Sistem: Foto", "[ISI HALAMAN")
+                    )), None)
                     if ringkasan:
                         full_response = "🤖 Berikut temuan yang saya dapatkan:\n\n" + ringkasan[:4000]
                     else:
