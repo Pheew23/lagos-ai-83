@@ -59,7 +59,7 @@ def panggil_api_dengan_retry(client_instance, **kwargs):
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg and attempt < max_retries - 1:
-                jeda = 12 + (attempt * 12)
+                jeda = 3 + (attempt * 3)
                 st.toast(f"⏳ Menyesuaikan limit 40 RPM. Melanjutkan dalam {jeda} detik... ({attempt+1}/{max_retries})")
                 time.sleep(jeda)
             else:
@@ -1254,7 +1254,7 @@ def main():
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
-                time.sleep(4)
+                time.sleep(1.5)
 
             except Exception as e:
                 st.error(f"Error pada loop agent: {str(e)}")
@@ -1278,7 +1278,7 @@ def main():
                         tools=LAGOS_TOOLS,
                         tool_choice="none",
                         temperature=0.7,
-                        max_tokens=8000,
+                        max_tokens=4000,
                         stream=True
                     )
                 except Exception:
@@ -1287,7 +1287,7 @@ def main():
                         model=selected_model,
                         messages=payload_khusus_api,
                         temperature=0.7,
-                        max_tokens=8000,
+                        max_tokens=4000,
                         stream=True
                     )
 
