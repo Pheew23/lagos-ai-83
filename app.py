@@ -70,7 +70,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "ambil_data_pasar",
-            "description": "Gunakan alat ini untuk mengambil data harga saham (.JK) atau kripto (-USD).",
+            "description": "Ambil data harga saham (.JK) atau kripto (-USD).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -84,11 +84,11 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_informasi_web",
-            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari). Hasil berisi JUDUL, URL, dan RINGKASAN.",
+            "description": "Cari berita/fakta/informasi terkini dari internet. Gunakan kata kunci yang sangat spesifik (termasuk nama daerah jika itu tempat lokal).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Kata kunci singkat & padat."}
+                    "query": {"type": "string", "description": "Kata kunci spesifik & akurat."}
                 },
                 "required": ["query"]
             }
@@ -112,7 +112,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_gambar",
-            "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata dari Wikipedia.",
+            "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -166,58 +166,30 @@ LAGOS_TOOLS = [
     }
 ]
 
-SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, Agen AI analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
+SYSTEM_PROMPT = """Anda adalah Lagøs AI, Asisten Kecerdasan Buatan analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
 
-ATURAN KETAT UNTUK MERESPONS UMUM:
-1. JANGAN PERNAH memperkenalkan diri, menyebutkan nama, atau menjelaskan kemampuan Anda, KECUALI ditanya spesifik.
-2. Jika tidak ditanya tentang identitas, jawab langsung ke inti pertanyaan pengguna tanpa basa-basi.
-3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
-4. Jangan Pernah membagikan informasi sensitif.
-5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
-6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah di jawaban.
+KARAKTERISTIK UTAMA ANDA:
+1. Anda sangat cerdas, natural, komprehensif, dan suportif layaknya asisten AI kelas dunia (berperilaku mirip Gemini).
+2. Anda WAJIB merangkum dan menyintesis informasi dari alat (tools) ke dalam kalimat yang enak dibaca. JANGAN PERNAH memberikan hasil log mentah atau memuntahkan teks mesin pencari ke pengguna. Gunakan gaya bahasa Anda sendiri.
+3. Jawab langsung ke inti pertanyaan. Jika diminta menganalisis, berikan analisis yang logis dan terstruktur.
+4. Jangan halusinasi. Jika informasi benar-benar tidak ada di internet, katakan jujur dengan sopan bahwa informasinya tidak ditemukan, lalu berikan saran alternatif.
+5. Gunakan format Markdown (Bold, Bullet Points) agar teks mudah dibaca. Sertakan tautan sumber (URL) jika mengutip berita/artikel.
 
-ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
-1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
-2. DILARANG mencari hal yang sama lebih dari 2 kali. Jika hasil tidak ada, jawab "Informasi tidak ditemukan".
-3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
-4. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
-5. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan". JANGAN MENGARANG.
-
-ATURAN MERANGKUM VIDEO (PENTING):
-1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
-2. Instagram/TikTok: beri tahu dengan sopan bahwa Anda tidak dapat memutar video tersebut.
-
-ATURAN MENAMPILKAN GAMBAR/FOTO:
-1. FOTO ASLI: gunakan alat `cari_gambar`. Tampilkan dengan Markdown: `![Deskripsi](URL)`
-2. ILUSTRASI/GAMBAR BUATAN: Langsung render Markdown:
-`![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail_yang_panjang?width=800&height=600&nologo=true)`
-(Ganti spasi dengan %%20).
-
-ATURAN ANTI-HALUSINASI:
-Jika informasi TIDAK ADA, WAJIB katakan: "Informasi tidak ditemukan". JANGAN MENGARANG!
-
-ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
-Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
+ATURAN MULTIMEDIA & FORMAT:
+- FOTO ASLI: `![Deskripsi](URL_Gambar)`
+- GAMBAR BUATAN AI: `![Generate Gambar](https://image.pollinations.ai/prompt/deskripsi_gambar_dalam_bahasa_inggris_detail?width=800&height=600&nologo=true)`
+- PPT JSON: Kembalikan MURNI JSON dalam blok:
 %sjson
 {
-  "judul_presentasi": "Judul Utama PPT",
+  "judul_presentasi": "Judul",
   "rekomendasi_tema": "bisnis",
-  "slides": [
-    {"slide_type": "title", "title": "Judul Utama", "content": "Sub-judul / Penulis"},
-    {"slide_type": "content", "title": "Judul Slide", "content": ["Poin 1", "Poin 2", "Poin 3"]}
-  ]
+  "slides": [{"slide_type": "title", "title": "Judul", "content": "Sub-judul"}]
 }
 %s
-
-ATURAN PEMBUATAN DOKUMEN (WORD/PDF):
-Rangkum kontennya MURNI di dalam blok kode `document`.
-Contoh:
+- DOKUMEN: Kembalikan konten dalam blok:
 %sdocument
-# Judul Dokumen
-## Sub Judul
+# Judul
 Isi paragraf...
-- Poin 1
-- Poin 2
 %s""" % (B3, B3, B3, B3)
 
 # ==========================================
@@ -395,15 +367,15 @@ class AgentTools:
             hasil = AgentTools._fallback_wikipedia(query)
 
         if not hasil:
-            return f"Pesan Sistem: Tidak menemukan info '{query}'. Coba kata kunci lain."
+            return f"[Log Sistem] Pencarian gagal menemukan info untuk '{query}'. Mohon analisis secara mandiri atau beri tahu pengguna bahwa data spesifik tidak ditemukan."
 
         out = [f'HASIL PENCARIAN WEB untuk "{query}":']
         for i, (judul, url, snippet) in enumerate(hasil[:6], 1):
-            baris = f"{i}. {judul}" if judul else f"{i}."
+            baris = f"{i}. Judul: {judul}" if judul else f"{i}."
             if url: baris += f"\n   URL: {url}"
-            if snippet: baris += f"\n   Ringkasan: {snippet}"
+            if snippet: baris += f"\n   Isi: {snippet}"
             out.append(baris)
-        out.append("CATATAN: Jika butuh detail, panggil baca_isi_website. Cantumkan sumber URL di jawaban.")
+        out.append("\n(SISTEM: Rangkum dan susun informasi di atas ke dalam bahasa Anda sendiri. Jangan pernah menampilkan log ini secara mentah kepada pengguna.)")
         return "\n".join(out)
 
     @staticmethod
@@ -419,7 +391,7 @@ class AgentTools:
                     f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
                     timeout=10).json()
                 img = (summ.get("originalimage") or summ.get("thumbnail") or {}).get("source")
-                if img: return f"Pesan Sistem: Foto '{title}' ditemukan. Tampilkan dengan: ![{title}]({img})"
+                if img: return f"Pesan Sistem: Foto '{title}' ditemukan. Tampilkan ke pengguna dengan format: ![{title}]({img})"
             return f"Pesan Sistem: Tidak menemukan foto untuk '{query}'."
         except Exception as e:
             return f"Gagal mencari gambar: {str(e)}"
@@ -851,27 +823,13 @@ def render_profile_card(username):
 def render_agent_chip(nama):
     st.markdown(f'<div class="agent-chip"><span class="pulse"></span> ⚙️ {html_escape(nama)}</div>', unsafe_allow_html=True)
 
-
+# Fungsi pembersih disederhanakan, hanya menghapus token sistem mesin saja (bukan logika merusak yang agresif)
 def bersihkan_teks_response(teks):
-    if not teks:
-        return ""
+    if not teks: return ""
+    teks = re.sub(r'<\|.*?\|>', '', teks)
     teks = re.sub(r'<atem:.*?(</atem:function_calls>|$)', '', teks, flags=re.DOTALL)
     teks = re.sub(r'<function_calls>.*?(</function_calls>|$)', '', teks, flags=re.DOTALL)
-    teks = re.sub(r'<invoke.*?(</invoke>|$)', '', teks, flags=re.DOTALL)
-    teks = re.sub(r'\bto=[a-zA-Z_]+', '', teks)
-    teks = re.sub(r'<\|[^|]*\|>', '', teks)
     return teks.strip()
-
-
-def apakah_jawaban_rusak(teks):
-    if not teks:
-        return True
-    if re.search(r'(to=|atem:|function_calls|<\||<invoke)', teks, re.I):
-        return True
-    if teks.strip().lower() in ("assistant", "user", "system", "assistant to"):
-        return True
-    return False
-
 
 def render_hero_login():
     st.markdown("""
@@ -1106,9 +1064,9 @@ def main():
     with st.container():
         uploader_idx = st.session_state.uploader_key
         if st.session_state.get(f"img_{uploader_idx}"):
-            st.markdown(f"<div class='file-pill'>📷 Gambar telah dilampirkan</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='file-pill'>📷 Gambar dilampirkan</div>", unsafe_allow_html=True)
         if st.session_state.get(f"doc_{uploader_idx}"):
-            st.markdown(f"<div class='file-pill'>📄 Dokumen telah dilampirkan</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='file-pill'>📄 Dokumen dilampirkan</div>", unsafe_allow_html=True)
 
         col_attach, col_input, col_mic = st.columns([1, 8, 1])
         with col_attach:
@@ -1190,16 +1148,11 @@ def main():
                 response_message = agent_response.choices[0].message
 
                 if not response_message.tool_calls:
-                    if response_message.content:
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": response_message.content
-                        })
                     break
 
                 tc_list = response_message.tool_calls[:2]
 
-                st.session_state.messages.append({
+                msg_assistant_tool = {
                     "role": "assistant",
                     "content": None,
                     "tool_calls": [
@@ -1209,19 +1162,10 @@ def main():
                             "function": {"name": tc.function.name, "arguments": tc.function.arguments}
                         } for tc in tc_list
                     ]
-                })
-
-                payload_khusus_api.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": tc.type,
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in tc_list
-                    ]
-                })
+                }
+                
+                st.session_state.messages.append(msg_assistant_tool)
+                payload_khusus_api.append(msg_assistant_tool)
 
                 for t_call in tc_list:
                     render_agent_chip(t_call.function.name)
@@ -1240,7 +1184,7 @@ def main():
                         query_asli = func_args.get("query", "")
                         query_key = query_asli.strip().lower()
                         if query_key in query_sudah_dicari:
-                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari sebelumnya. JANGAN ulangi pencarian. Jawab sekarang berdasarkan hasil yang ada, atau katakan Informasi tidak ditemukan."
+                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari. JANGAN ulangi pencarian yang sama."
                         else:
                             query_sudah_dicari.add(query_key)
                             st.info(f"🔍 Mencari: '{query_asli}'...")
@@ -1280,36 +1224,26 @@ def main():
                 st.error(f"Error pada loop agent: {str(e)}")
                 break
 
-        # ========== STREAMING JAWABAN AKHIR ==========
+        # ========== STREAMING JAWABAN AKHIR (Penyintesisan Data) ==========
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant" \
-                and "tool_calls" not in st.session_state.messages[-1]:
+                and "tool_calls" not in st.session_state.messages[-1] and not st.session_state.messages[-1].get("content"):
             st.session_state.messages.pop()
+            payload_khusus_api.pop()
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
             full_response = ""
 
             try:
-                try:
-                    response_stream = panggil_api_dengan_retry(
-                        client,
-                        model=selected_model,
-                        messages=payload_khusus_api,
-                        tools=LAGOS_TOOLS,
-                        tool_choice="none",
-                        temperature=0.7,
-                        max_tokens=4000,
-                        stream=True
-                    )
-                except Exception:
-                    response_stream = panggil_api_dengan_retry(
-                        client,
-                        model=selected_model,
-                        messages=payload_khusus_api,
-                        temperature=0.7,
-                        max_tokens=4000,
-                        stream=True
-                    )
+                # Perhatikan: parameter tools dihilangkan di sini agar model dipaksa murni mengeluarkan Teks Balasan (Synthesize)
+                response_stream = panggil_api_dengan_retry(
+                    client,
+                    model=selected_model,
+                    messages=payload_khusus_api,
+                    temperature=0.7,
+                    max_tokens=4000,
+                    stream=True
+                )
 
                 for chunk in response_stream:
                     if chunk.choices and len(chunk.choices) > 0:
@@ -1320,15 +1254,12 @@ def main():
 
                 full_response = bersihkan_teks_response(full_response)
 
-                # FALLBACK: jika jawaban rusak, tampilkan temuan mentah
-                if apakah_jawaban_rusak(full_response):
-                    ringkasan = next((h for h in reversed(hasil_tool_semua) if h.startswith(
-                        ("HASIL PENCARIAN", "Transkrip", "Data 5 Hari", "Hasil", "Pesan Sistem: Foto", "[ISI HALAMAN")
-                    )), None)
-                    if ringkasan:
-                        full_response = "🤖 Berikut temuan yang saya dapatkan:\n\n" + ringkasan[:4000]
+                # Pencegahan khusus jika setelah dibersihkan teksnya kosong
+                if not full_response.strip():
+                    if hasil_tool_semua:
+                        full_response = "Saya telah menemukan informasinya dari internet, namun mengalami sedikit kendala saat mencoba merangkum kalimatnya. Silakan coba tanyakan kembali secara lebih spesifik."
                     else:
-                        full_response = "Maaf, model AI sedang tidak stabil. Silakan ulangi pertanyaan Anda. 🙏"
+                        full_response = "Maaf, API model sedang tidak stabil untuk menjawab saat ini. Mohon ulangi lagi pertanyaan Anda. 🙏"
 
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
@@ -1361,7 +1292,6 @@ def main():
 
                 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
                     st.session_state.messages.pop()
-
 
 if __name__ == "__main__":
     main()
