@@ -52,8 +52,7 @@ HTTP.headers.update({
     'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
 })
 
-# Timeout seragam & cepat
-HTTP_TIMEOUT = 10
+HTTP_TIMEOUT = 8  # seragam & cepat
 
 def panggil_api_dengan_retry(client_instance, **kwargs):
     max_retries = 4
@@ -246,7 +245,7 @@ def setup_database():
     return True
 
 # ==========================================
-# 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS) — CEPAT & PARALEL
+# 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS) — CEPAT, PARALEL, CACHE
 # ==========================================
 class AgentTools:
 
@@ -312,7 +311,6 @@ class AgentTools:
             if judul and url.startswith("http"): hasil.append((judul, url, snippet))
         return hasil
 
-    # ---------- MESIN PENCARI (semua timeout 10 detik, return aman) ----------
     @staticmethod
     def _mesin_ddg_html(query):
         try:
@@ -410,37 +408,32 @@ class AgentTools:
         except: pass
         return out
 
-    # ---------- ORCHESTRATOR PARALEL ----------
+    # CACHE 10 menit: pertanyaan berulang = INSTAN
     @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
     def cari_informasi_web(query: str) -> str:
         qtoks = AgentTools._token_query(query)
         kandidat = []
 
-        # Putaran 1: 4 mesin utama DIJALANKAN BERSAMAAN
         batch_1 = ["ddg_html", "jina", "bing", "ddg_api"]
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {executor.submit(getattr(AgentTools, "_mesin_" + e), query): e for e in batch_1}
             for future in as_completed(futures):
                 try:
-                    mentah = future.result()
-                    for judul, url, snippet in mentah:
+                    for judul, url, snippet in future.result():
                         skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
-                        if skor >= 1:
-                            kandidat.append((skor, judul, url, snippet))
+                        if skor >= 1: kandidat.append((skor, judul, url, snippet))
                 except: pass
 
-        # Putaran 2: jika masih kurang, tambah 3 mesin lagi BERSAMAAN
         if len(kandidat) < 3:
             batch_2 = ["yahoo", "ddg_lite", "wiki"]
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {executor.submit(getattr(AgentTools, "_mesin_" + e), query): e for e in batch_2}
                 for future in as_completed(futures):
                     try:
-                        mentah = future.result()
-                        for judul, url, snippet in mentah:
+                        for judul, url, snippet in future.result():
                             skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
-                            if skor >= 1:
-                                kandidat.append((skor, judul, url, snippet))
+                            if skor >= 1: kandidat.append((skor, judul, url, snippet))
                     except: pass
 
         if not kandidat:
@@ -448,7 +441,6 @@ class AgentTools:
                     f"Jika Anda yakin dengan pengetahuan internal Anda, jawab dengan awalan 'Berdasarkan pengetahuan saya:'. "
                     f"Jika tidak tahu sama sekali, katakan: Informasi tidak ditemukan.")
 
-        # Deduplicate by URL
         seen_urls = set()
         unik = []
         for item in kandidat:
@@ -728,14 +720,14 @@ class MediaUtils:
         if daftar_gambar: hasil += "\n\n[GAMBAR DI HALAMAN:]\n" + "\n".join(daftar_gambar)
         return hasil
 
+    # CACHE 10 menit: baca URL yang sama = INSTAN
     @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
     def ambil_teks_dari_link(url: str) -> str:
         try:
             if not url.startswith('http'): url = 'https://' + url
-            # Jina dulu (tercepat & paling bersih)
             html = MediaUtils._ambil_via_jina(url)
             if html: return f"[ISI HALAMAN: {url}]\n{html[:12000]}"
-            # Paralel fallback: langsung + allorigins
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f1 = executor.submit(MediaUtils._ambil_langsung, url)
                 f2 = executor.submit(MediaUtils._ambil_via_allorigins, url)
@@ -1193,7 +1185,6 @@ def main():
             if _apakah_url_valid(u) and u not in semua_url:
                 semua_url.append(u)
 
-        # Ambil URL paralel juga
         if semua_url[:3]:
             with ThreadPoolExecutor(max_workers=min(3, len(semua_url))) as executor:
                 future_map = {executor.submit(MediaUtils.ambil_teks_dari_link, u): u for u in semua_url[:3]}
@@ -1223,22 +1214,26 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ========== AGENT LOOP (LOOP TETAP 5, tapi delay dikurangi) ==========
+        # ========== AGENT LOOP (HEMAT 1 PANGGILAN MODEL) ==========
         MAX_AGENT_LOOPS = 5
         query_sudah_dicari = set()
+        jawaban_loop = None
+        finish_loop = None
 
         for loop_idx in range(MAX_AGENT_LOOPS):
             try:
                 agent_response = panggil_api_dengan_retry(
                     client, model=selected_model, messages=payload_khusus_api,
-                    tools=LAGOS_TOOLS, tool_choice="auto", max_tokens=1500
+                    tools=LAGOS_TOOLS, tool_choice="auto", max_tokens=3000
                 )
 
                 response_message = agent_response.choices[0].message
+                finish_loop = agent_response.choices[0].finish_reason
 
+                # Jika model langsung menjawab (tanpa tool) -> SIMPAN, jangan generate ulang!
                 if not response_message.tool_calls:
                     if response_message.content:
-                        st.session_state.messages.append({"role": "assistant", "content": response_message.content})
+                        jawaban_loop = bersihkan_teks_response(response_message.content)
                     break
 
                 tc_list = response_message.tool_calls[:3]
@@ -1300,22 +1295,24 @@ def main():
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
-                time.sleep(0.6)  # dikurangi dari 1.5
+                time.sleep(0.3)
 
             except Exception as e:
                 st.error(f"Error pada loop agent: {str(e)}")
                 break
 
-        # ========== STREAMING JAWABAN AKHIR ==========
-        if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant" \
-                and "tool_calls" not in st.session_state.messages[-1]:
-            st.session_state.messages.pop()
+        # ========== JAWABAN AKHIR ==========
+        use_instant = bool(jawaban_loop) and not apakah_jawaban_rusak(jawaban_loop) and finish_loop != "length"
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
             full_response = ""
 
-            try:
+            if use_instant:
+                # INSTAN: pakai jawaban yang sudah dibuat loop (hemat 5-15 detik)
+                full_response = jawaban_loop
+                placeholder.markdown(full_response)
+            else:
                 try:
                     response_stream = panggil_api_dengan_retry(
                         client, model=selected_model, messages=payload_khusus_api,
@@ -1356,36 +1353,25 @@ def main():
                     full_response = "Maaf, saya tidak dapat memproses jawaban dengan stabil saat ini. Silakan ulangi pertanyaan Anda. 🙏"
 
                 placeholder.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-                st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
 
-                if st.session_state.current_session_id is None:
-                    st.session_state.current_session_id = str(uuid.uuid4())
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            st.session_state.token_usage += (len(str(st.session_state.messages)) // 4)
 
-                DatabaseManager.save_session(
-                    st.session_state.current_session_id,
-                    st.session_state.username,
-                    MediaUtils.generate_title_from_messages(st.session_state.messages),
-                    st.session_state.messages
-                )
+            if st.session_state.current_session_id is None:
+                st.session_state.current_session_id = str(uuid.uuid4())
 
-                st.session_state.temp_image = None
-                st.session_state.temp_doc = None
-                st.session_state.uploader_key += 1
+            DatabaseManager.save_session(
+                st.session_state.current_session_id,
+                st.session_state.username,
+                MediaUtils.generate_title_from_messages(st.session_state.messages),
+                st.session_state.messages
+            )
 
-                st.rerun()
+            st.session_state.temp_image = None
+            st.session_state.temp_doc = None
+            st.session_state.uploader_key += 1
 
-            except Exception as e:
-                error_msg = str(e)
-                if "429" in error_msg:
-                    st.error("⏳ API sedang mencapai batas maksimal dari NVIDIA. Silakan tunggu beberapa saat lagi.")
-                elif "404" in error_msg:
-                    st.error("❌ Kesalahan 404: Model AI sedang tidak tersedia dari server.")
-                else:
-                    st.error(f"Kesalahan teknis: {error_msg}")
-
-                if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-                    st.session_state.messages.pop()
+            st.rerun()
 
 
 if __name__ == "__main__":
