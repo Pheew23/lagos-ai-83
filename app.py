@@ -84,7 +84,7 @@ LAGOS_TOOLS = [
         "type": "function",
         "function": {
             "name": "cari_informasi_web",
-            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari). Hasil berisi JUDUL, URL, dan RINGKASAN.",
+            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari + filter relevansi). Hasil berisi JUDUL, URL, dan RINGKASAN.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -175,13 +175,14 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 4. Jangan Pernah membagikan informasi sensitif.
 5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
 6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah di jawaban.
+7. JANGAN PERNAH keluar dari konteks pertanyaan. Jika data tidak relevan dengan topik, anggap tidak ditemukan.
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
 1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
-2. DILARANG mencari hal yang sama lebih dari 2 kali. Jika hasil tidak ada, jawab "Informasi tidak ditemukan".
+2. Jangan mencari hal yang sama lebih dari 2 kali.
 3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
 4. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
-5. Jika seluruh mesin pencarian gagal, jawab jujur: "Informasi tidak ditemukan". JANGAN MENGARANG.
+5. Jika hasil pencarian TIDAK RELEVAN dengan topik pertanyaan (misal topik berbeda), JANGAN dipaksakan; jawab "Informasi tidak ditemukan".
 
 ATURAN MERANGKUM VIDEO (PENTING):
 1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
@@ -316,10 +317,46 @@ def setup_database():
 # ==========================================
 class AgentTools:
 
+    STOPWORDS = {"dan","di","ke","dari","yang","untuk","pada","adalah","atau","dengan","tentang",
+                 "apa","siapa","berapa","kapan","dimana","mengapa","bagaimana","ada","tau","tahu",
+                 "the","a","an","of","in","on","for","to","and","or","is","are","was","were","www","http","https","com"}
+
+    @staticmethod
+    def _token_query(q):
+        toks = re.findall(r"[a-z0-9]{3,}", q.lower())
+        return [t for t in toks if t not in AgentTools.STOPWORDS]
+
+    @staticmethod
+    def _skor_relevan(qtoks, teks):
+        if not qtoks:
+            return 9
+        tl = teks.lower()
+        hits = [t for t in qtoks if t in tl]
+        if not hits:
+            return 0
+        terpanjang = sorted(qtoks, key=len, reverse=True)[:3]
+        bonus = 2 if any(t in tl for t in terpanjang) else 0
+        return len(hits) + bonus
+
+    @staticmethod
+    def _decode_bing_url(href):
+        try:
+            if "/ck/a?" in href:
+                qs = parse_qs(urlparse(href).query)
+                u = qs.get("u", [""])[0]
+                if u:
+                    pad = u + "=" * (-len(u) % 4)
+                    raw = base64.b64decode(pad)
+                    if raw:
+                        return raw[1:].decode("utf-8", "ignore")
+        except Exception:
+            pass
+        return href
+
     @staticmethod
     def _parse_ddg_html(soup) -> List[tuple]:
         hasil = []
-        for res in soup.select("div.result")[:6]:
+        for res in soup.select("div.result")[:8]:
             a = res.select_one("a.result__a")
             sn = res.select_one(".result__snippet")
             if not a and not sn: continue
@@ -336,7 +373,7 @@ class AgentTools:
     @staticmethod
     def _parse_bing(soup) -> List[tuple]:
         hasil = []
-        for li in soup.select("li.b_algo")[:6]:
+        for li in soup.select("li.b_algo")[:8]:
             a = li.select_one("h2 a")
             p = li.select_one("p")
             if not a: continue
@@ -366,13 +403,19 @@ class AgentTools:
 
     @staticmethod
     def cari_informasi_web(query: str) -> str:
+        qtoks = AgentTools._token_query(query)
         hasil = []
+
+        # Mesin 1: DuckDuckGo HTML (dengan filter relevansi)
         try:
             r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=15)
             if r.status_code == 200:
-                hasil = AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser"))
+                for judul, url, snippet in AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser")):
+                    if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 2:
+                        hasil.append((judul, url, snippet))
         except: pass
 
+        # Mesin 2: DuckDuckGo Lite
         if not hasil:
             try:
                 r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=15)
@@ -380,30 +423,40 @@ class AgentTools:
                     soup = BeautifulSoup(r.text, "html.parser")
                     for tr in soup.find_all("tr"):
                         td = tr.find("td", class_="result-snippet")
-                        if td: hasil.append(("", "", td.get_text(" ", strip=True)))
-                    hasil = hasil[:6]
+                        if td:
+                            s = td.get_text(" ", strip=True)
+                            if AgentTools._skor_relevan(qtoks, s) >= 2:
+                                hasil.append(("", "", s))
             except: pass
 
+        # Mesin 3: Bing (URL didekode + filter relevansi)
         if not hasil:
             try:
-                r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 8}, timeout=15)
+                r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 10}, timeout=15)
                 if r.status_code == 200:
-                    hasil = AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser"))
+                    for judul, url, snippet in AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser")):
+                        url = AgentTools._decode_bing_url(url)
+                        if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 2:
+                            hasil.append((judul, url, snippet))
             except: pass
 
+        # Mesin 4: Wikipedia
         if not hasil:
-            hasil = AgentTools._fallback_wikipedia(query)
+            for judul, url, snippet in AgentTools._fallback_wikipedia(query):
+                if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 1:
+                    hasil.append((judul, url, snippet))
 
         if not hasil:
-            return f"Pesan Sistem: Tidak menemukan info '{query}'. Coba kata kunci lain."
+            return f"Pesan Sistem: Tidak menemukan informasi yang relevan untuk '{query}'. Jawab jujur: Informasi tidak ditemukan. Jangan mengarang."
 
+        hasil = hasil[:5]
         out = [f'HASIL PENCARIAN WEB untuk "{query}":']
-        for i, (judul, url, snippet) in enumerate(hasil[:6], 1):
+        for i, (judul, url, snippet) in enumerate(hasil, 1):
             baris = f"{i}. {judul}" if judul else f"{i}."
             if url: baris += f"\n   URL: {url}"
-            if snippet: baris += f"\n   Ringkasan: {snippet}"
+            if snippet: baris += f"\n   Ringkasan: {snippet[:300]}"
             out.append(baris)
-        out.append("CATATAN: Jika butuh detail, panggil baca_isi_website. Cantumkan sumber URL di jawaban.")
+        out.append("CATATAN: Jawab HANYA berdasarkan hasil di atas. Jika topik hasil berbeda dengan pertanyaan, katakan Informasi tidak ditemukan.")
         return "\n".join(out)
 
     @staticmethod
@@ -873,14 +926,6 @@ def apakah_jawaban_rusak(teks):
     return False
 
 
-def ambil_ringkasan_tool(daftar_hasil):
-    prefix_bagus = ("HASIL PENCARIAN", "Transkrip", "Data 5 Hari", "Hasil", "Pesan Sistem: Foto", "[ISI HALAMAN")
-    for h in reversed(daftar_hasil):
-        if h.startswith(prefix_bagus):
-            return h
-    return None
-
-
 def render_hero_login():
     st.markdown("""
     <div class="hero">
@@ -1179,9 +1224,8 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ========== AGENT LOOP (DIBATASI ANTI-SPAM) ==========
+        # ========== AGENT LOOP (5 RONDE, ANTI-SPAM, FILTER RELEVANSI) ==========
         MAX_AGENT_LOOPS = 5
-        hasil_tool_semua = []
         query_sudah_dicari = set()
 
         for loop_idx in range(MAX_AGENT_LOOPS):
@@ -1248,7 +1292,7 @@ def main():
                         query_asli = func_args.get("query", "")
                         query_key = query_asli.strip().lower()
                         if query_key in query_sudah_dicari:
-                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari sebelumnya. JANGAN ulangi pencarian. Jawab sekarang berdasarkan hasil yang ada, atau katakan Informasi tidak ditemukan."
+                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari sebelumnya. JANGAN ulangi. Jawab sekarang berdasarkan hasil yang ada, atau katakan Informasi tidak ditemukan."
                         else:
                             query_sudah_dicari.add(query_key)
                             st.info(f"🔍 Mencari: '{query_asli}'...")
@@ -1270,8 +1314,6 @@ def main():
                     elif func_name == "hitung_matematika":
                         st.info(f"🧮 Menghitung: {func_args.get('ekspresi', '')}...")
                         hasil_fungsi = AgentTools.hitung_matematika(func_args.get("ekspresi", ""))
-
-                    hasil_tool_semua.append(str(hasil_fungsi))
 
                     tool_msg = {
                         "tool_call_id": tool_call.id,
@@ -1328,12 +1370,26 @@ def main():
 
                 full_response = bersihkan_teks_response(full_response)
 
+                # REPAIR CALL: perbaiki jawaban rusak sekali lagi
                 if apakah_jawaban_rusak(full_response):
-                    ringkasan = ambil_ringkasan_tool(hasil_tool_semua)
-                    if ringkasan:
-                        full_response = "🤖 Berikut temuan yang saya dapatkan:\n\n" + ringkasan[:4000]
-                    else:
-                        full_response = "Maaf, model AI sedang tidak stabil. Silakan ulangi pertanyaan Anda. 🙏"
+                    try:
+                        repair = panggil_api_dengan_retry(
+                            client,
+                            model=selected_model,
+                            messages=payload_khusus_api + [
+                                {"role": "user", "content": "Sistem: jawaban sebelumnya rusak. Berdasarkan HASIL ALAT di atas saja, tulis jawaban akhir sekarang dalam markdown bersih dan relevan. Jika data tidak ada/tidak relevan, tulis tepat: Informasi tidak ditemukan."}
+                            ],
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                        teks_repair = bersihkan_teks_response(repair.choices[0].message.content or "")
+                        if teks_repair and not apakah_jawaban_rusak(teks_repair):
+                            full_response = teks_repair
+                    except Exception:
+                        pass
+
+                if apakah_jawaban_rusak(full_response):
+                    full_response = "Maaf, saya tidak menemukan informasi yang relevan untuk pertanyaan ini. Silakan coba kata kunci yang lebih spesifik. 🙏"
 
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
