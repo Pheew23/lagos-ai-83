@@ -66,104 +66,34 @@ def panggil_api_dengan_retry(client_instance, **kwargs):
                 raise e
 
 LAGOS_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "ambil_data_pasar",
-            "description": "Gunakan alat ini untuk mengambil data harga saham (.JK) atau kripto (-USD).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "simbol_ticker": {"type": "string", "description": "Simbol saham (.JK) atau kripto (-USD)."}
-                },
-                "required": ["simbol_ticker"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "cari_informasi_web",
-            "description": "Cari berita/fakta/informasi terkini dari internet (multi mesin pencari + filter relevansi). Hasil berisi JUDUL, URL, dan RINGKASAN.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Kata kunci singkat & padat."}
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "baca_isi_website",
-            "description": "Baca isi lengkap halaman dari URL dalam bentuk teks bersih.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "URL website (dimulai http/https)."}
-                },
-                "required": ["url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "cari_gambar",
-            "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh di dunia nyata dari Wikipedia.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya."}
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "ambil_transkrip_youtube",
-            "description": "Ambil teks/transkrip dari URL video YouTube untuk dirangkum.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "video_url": {"type": "string", "description": "Link URL video YouTube lengkap."}
-                },
-                "required": ["video_url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "eksekusi_python",
-            "description": "Jalankan skrip Python murni (analisis data, logika, kalkulasi).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "kode": {"type": "string", "description": "Kode Python murni yang ingin dieksekusi."}
-                },
-                "required": ["kode"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "hitung_matematika",
-            "description": "Hitung operasi matematika agar hasilnya akurat.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ekspresi": {"type": "string", "description": "Ekspresi matematika (contoh: 25000 * 1.15)."}
-                },
-                "required": ["ekspresi"]
-            }
-        }
-    }
+    {"type": "function", "function": {
+        "name": "ambil_data_pasar",
+        "description": "Gunakan alat ini untuk mengambil data harga saham (.JK) atau kripto (-USD).",
+        "parameters": {"type": "object", "properties": {"simbol_ticker": {"type": "string", "description": "Simbol saham (.JK) atau kripto (-USD)."}}, "required": ["simbol_ticker"]}}},
+    {"type": "function", "function": {
+        "name": "cari_informasi_web",
+        "description": "Cari berita/fakta/informasi terkini dari internet (7 mesin pencari + filter relevansi). Hasil berisi JUDUL, URL, RINGKASAN.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Kata kunci singkat & padat."}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "baca_isi_website",
+        "description": "Baca isi lengkap halaman dari URL dalam bentuk teks bersih.",
+        "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL website (dimulai http/https)."}}, "required": ["url"]}}},
+    {"type": "function", "function": {
+        "name": "cari_gambar",
+        "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh dari Wikipedia.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya."}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "ambil_transkrip_youtube",
+        "description": "Ambil teks/transkrip dari URL video YouTube untuk dirangkum.",
+        "parameters": {"type": "object", "properties": {"video_url": {"type": "string", "description": "Link URL video YouTube lengkap."}}, "required": ["video_url"]}}},
+    {"type": "function", "function": {
+        "name": "eksekusi_python",
+        "description": "Jalankan skrip Python murni (analisis data, logika, kalkulasi).",
+        "parameters": {"type": "object", "properties": {"kode": {"type": "string", "description": "Kode Python murni yang ingin dieksekusi."}}, "required": ["kode"]}}},
+    {"type": "function", "function": {
+        "name": "hitung_matematika",
+        "description": "Hitung operasi matematika agar hasilnya akurat.",
+        "parameters": {"type": "object", "properties": {"ekspresi": {"type": "string", "description": "Ekspresi matematika (contoh: 25000 * 1.15)."}}, "required": ["ekspresi"]}}}
 ]
 
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, Agen AI analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
@@ -174,15 +104,16 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
-6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah di jawaban.
-7. JANGAN PERNAH keluar dari konteks pertanyaan. Jika data tidak relevan dengan topik, anggap tidak ditemukan.
+6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah.
+7. JANGAN PERNAH keluar dari konteks pertanyaan.
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
 1. Untuk pertanyaan tentang fakta terkini, berita, harga, jadwal, versi terbaru, WAJIB panggil cari_informasi_web.
 2. Jangan mencari hal yang sama lebih dari 2 kali.
 3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
-4. Selalu akhiri jawaban faktual dengan baris "Sumber:" berisi tautan markdown ke URL yang Anda pakai.
-5. Jika hasil pencarian TIDAK RELEVAN dengan topik pertanyaan (misal topik berbeda), JANGAN dipaksakan; jawab "Informasi tidak ditemukan".
+4. Selalu akhiri jawaban faktual berbasis web dengan baris "Sumber:" berisi tautan markdown.
+5. Jika hasil pencarian kosong atau tidak relevan, Anda BOLEH menjawab dari pengetahuan internal Anda bila yakin benar, dengan awalan "Berdasarkan pengetahuan saya:". Ini membuat Anda tetap berguna.
+6. Katakan "Informasi tidak ditemukan" HANYA jika pencarian gagal DAN Anda benar-benar tidak tahu.
 
 ATURAN MERANGKUM VIDEO (PENTING):
 1. Jika pengguna meminta merangkum video YouTube, selalu gunakan alat `ambil_transkrip_youtube`.
@@ -195,7 +126,7 @@ ATURAN MENAMPILKAN GAMBAR/FOTO:
 (Ganti spasi dengan %%20).
 
 ATURAN ANTI-HALUSINASI:
-Jika informasi TIDAK ADA, WAJIB katakan: "Informasi tidak ditemukan". JANGAN MENGARANG!
+Jangan mengarang DATA SPESIFIK (angka, tanggal, nama) tanpa dasar alat atau keyakinan pengetahuan. Jika ragu, akui keterbatasan.
 
 ATURAN PEMBUATAN PRESENTASI (PPT OTOMATIS):
 Rangkum materi menjadi slide dan kembalikan MURNI dalam JSON:
@@ -277,7 +208,6 @@ class DatabaseManager:
             c = conn.cursor()
             c.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY id ASC", (session_id,))
             rows = c.fetchall()
-
         msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
         for r, content_str in rows:
             try: msgs.append({"role": r, "content": json.loads(content_str)})
@@ -291,7 +221,6 @@ class DatabaseManager:
             c.execute("INSERT OR REPLACE INTO sessions (session_id, username, title, updated_at) VALUES (?, ?, ?, ?)",
                       (session_id, username, title, datetime.datetime.now()))
             c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-
             for msg in messages:
                 if msg["role"] != "system":
                     content = json.dumps(msg["content"])
@@ -328,12 +257,10 @@ class AgentTools:
 
     @staticmethod
     def _skor_relevan(qtoks, teks):
-        if not qtoks:
-            return 9
+        if not qtoks: return 9
         tl = teks.lower()
         hits = [t for t in qtoks if t in tl]
-        if not hits:
-            return 0
+        if not hits: return 0
         terpanjang = sorted(qtoks, key=len, reverse=True)[:3]
         bonus = 2 if any(t in tl for t in terpanjang) else 0
         return len(hits) + bonus
@@ -347,10 +274,8 @@ class AgentTools:
                 if u:
                     pad = u + "=" * (-len(u) % 4)
                     raw = base64.b64decode(pad)
-                    if raw:
-                        return raw[1:].decode("utf-8", "ignore")
-        except Exception:
-            pass
+                    if raw: return raw[1:].decode("utf-8", "ignore")
+        except Exception: pass
         return href
 
     @staticmethod
@@ -383,6 +308,73 @@ class AgentTools:
             if judul and url.startswith("http"): hasil.append((judul, url, snippet))
         return hasil
 
+    # ---------- 7 MESIN PENCARI ----------
+    @staticmethod
+    def _mesin_ddg_html(query):
+        r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=15)
+        if r.status_code == 200:
+            return AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser"))
+        return []
+
+    @staticmethod
+    def _mesin_ddg_lite(query):
+        out = []
+        r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=15)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            for tr in soup.find_all("tr"):
+                td = tr.find("td", class_="result-snippet")
+                if td: out.append(("", "", td.get_text(" ", strip=True)))
+        return out
+
+    @staticmethod
+    def _mesin_ddg_api(query):
+        out = []
+        d = HTTP.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "no_html": 1}, timeout=10).json()
+        abstract = d.get("AbstractText") or ""
+        if abstract: out.append((d.get("Heading", ""), d.get("FirstURL", ""), abstract))
+        for t in d.get("RelatedTopics", [])[:3]:
+            if isinstance(t, dict) and t.get("Text"):
+                out.append(("", t.get("FirstURL", ""), t["Text"]))
+        return out
+
+    @staticmethod
+    def _mesin_bing(query):
+        out = []
+        r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 10}, timeout=15)
+        if r.status_code == 200:
+            for j, u, s in AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser")):
+                out.append((j, AgentTools._decode_bing_url(u), s))
+        return out
+
+    @staticmethod
+    def _mesin_yahoo(query):
+        out = []
+        r = HTTP.get("https://search.yahoo.com/search", params={"p": query}, timeout=15)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            for h3 in soup.select("h3.title")[:8]:
+                a = h3.find("a")
+                if not a: continue
+                li = h3.find_parent("li")
+                p = li.find("p") if li else None
+                out.append((a.get_text(" ", strip=True), a.get("href", ""), p.get_text(" ", strip=True) if p else ""))
+        return out
+
+    @staticmethod
+    def _mesin_jina(query):
+        out = []
+        r = HTTP.get("https://s.jina.ai/" + quote(query), timeout=20)
+        if r.status_code == 200:
+            for m in re.finditer(r"###\s*(.+?)\n\s*URL:\s*(\S+)(.*?)(?=###|\Z)", r.text, re.S):
+                judul, url, isi = m.group(1).strip(), m.group(2).strip(), re.sub(r"\s+", " ", m.group(3)).strip()
+                out.append((judul, url, isi[:400]))
+        return out
+
+    @staticmethod
+    def _mesin_wiki(query):
+        return AgentTools._fallback_wikipedia(query)
+
     @staticmethod
     def _fallback_wikipedia(query: str) -> List[tuple]:
         for lang in ("id", "en"):
@@ -404,59 +396,47 @@ class AgentTools:
     @staticmethod
     def cari_informasi_web(query: str) -> str:
         qtoks = AgentTools._token_query(query)
-        hasil = []
+        kandidat = []
 
-        # Mesin 1: DuckDuckGo HTML (dengan filter relevansi)
-        try:
-            r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=15)
-            if r.status_code == 200:
-                for judul, url, snippet in AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser")):
-                    if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 2:
-                        hasil.append((judul, url, snippet))
-        except: pass
-
-        # Mesin 2: DuckDuckGo Lite
-        if not hasil:
+        for engine in ("ddg_html", "jina", "bing", "yahoo", "ddg_lite", "ddg_api", "wiki"):
             try:
-                r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=15)
-                if r.status_code == 200:
-                    soup = BeautifulSoup(r.text, "html.parser")
-                    for tr in soup.find_all("tr"):
-                        td = tr.find("td", class_="result-snippet")
-                        if td:
-                            s = td.get_text(" ", strip=True)
-                            if AgentTools._skor_relevan(qtoks, s) >= 2:
-                                hasil.append(("", "", s))
-            except: pass
+                mentah = getattr(AgentTools, "_mesin_" + engine)(query)
+            except Exception:
+                mentah = []
+            for judul, url, snippet in mentah:
+                skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
+                if skor >= 1:
+                    kandidat.append((skor, judul, url, snippet))
+            if len(kandidat) >= 3:
+                break
 
-        # Mesin 3: Bing (URL didekode + filter relevansi)
-        if not hasil:
-            try:
-                r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 10}, timeout=15)
-                if r.status_code == 200:
-                    for judul, url, snippet in AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser")):
-                        url = AgentTools._decode_bing_url(url)
+        # Ekspansi query: coba kata-kata terpenting saja
+        if not kandidat:
+            pendek = " ".join(sorted(qtoks, key=len, reverse=True)[:3])
+            if pendek:
+                for engine in ("bing", "ddg_html", "yahoo"):
+                    try:
+                        mentah = getattr(AgentTools, "_mesin_" + engine)(pendek)
+                    except Exception:
+                        mentah = []
+                    for judul, url, snippet in mentah:
                         if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 2:
-                            hasil.append((judul, url, snippet))
-            except: pass
+                            kandidat.append((3, judul, url, snippet))
+                    if kandidat: break
 
-        # Mesin 4: Wikipedia
-        if not hasil:
-            for judul, url, snippet in AgentTools._fallback_wikipedia(query):
-                if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 1:
-                    hasil.append((judul, url, snippet))
+        if not kandidat:
+            return (f"Pesan Sistem: Pencarian web tidak menemukan hasil relevan untuk '{query}'. "
+                    f"Jika Anda yakin dengan pengetahuan internal Anda, jawab dengan awalan 'Berdasarkan pengetahuan saya:'. "
+                    f"Jika tidak tahu sama sekali, katakan: Informasi tidak ditemukan.")
 
-        if not hasil:
-            return f"Pesan Sistem: Tidak menemukan informasi yang relevan untuk '{query}'. Jawab jujur: Informasi tidak ditemukan. Jangan mengarang."
-
-        hasil = hasil[:5]
+        kandidat.sort(key=lambda x: x[0], reverse=True)
         out = [f'HASIL PENCARIAN WEB untuk "{query}":']
-        for i, (judul, url, snippet) in enumerate(hasil, 1):
+        for i, (skor, judul, url, snippet) in enumerate(kandidat[:5], 1):
             baris = f"{i}. {judul}" if judul else f"{i}."
             if url: baris += f"\n   URL: {url}"
             if snippet: baris += f"\n   Ringkasan: {snippet[:300]}"
             out.append(baris)
-        out.append("CATATAN: Jawab HANYA berdasarkan hasil di atas. Jika topik hasil berbeda dengan pertanyaan, katakan Informasi tidak ditemukan.")
+        out.append("CATATAN: Jawab berdasarkan hasil di atas. Jika topik hasil jelas berbeda dengan pertanyaan, gunakan pengetahuan internal atau katakan Informasi tidak ditemukan.")
         return "\n".join(out)
 
     @staticmethod
@@ -711,8 +691,7 @@ class MediaUtils:
             t = el.get_text(' ', strip=True)
             if not t or len(t) < 3: continue
             if el.name.startswith('h'):
-                level = '#' * int(el.name[1])
-                teks_bagian.append(f"{level} {t}")
+                teks_bagian.append(f"{'#' * int(el.name[1])} {t}")
             elif el.name == 'li':
                 teks_bagian.append(f"- {t}")
             else:
@@ -811,71 +790,56 @@ def inject_custom_css():
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
-
     :root{
       --bg:#0b0e14; --surface:#10141f; --card:#141927; --input:#151a28;
       --border:rgba(255,255,255,.07); --text:#e8ecf4; --muted:#8b93a7;
-      --acc1:#7c5cff; --acc2:#22d3ee;
       --grad:linear-gradient(135deg,#7c5cff 0%,#22d3ee 100%);
     }
-
     html,body,[data-testid="stAppViewContainer"],section.main{background:var(--bg) !important;}
     html,body,[class*="css"]{font-family:'Plus Jakarta Sans',sans-serif;}
     h1,h2,h3{font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif;}
     #MainMenu,footer{visibility:hidden;}
     header[data-testid="stHeader"]{background:transparent;}
-
     ::-webkit-scrollbar{width:8px;height:8px;}
     ::-webkit-scrollbar-thumb{background:#2a3145;border-radius:8px;}
     ::-webkit-scrollbar-track{background:transparent;}
-
     @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
     @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-
     .brand-bar{display:flex;justify-content:space-between;align-items:center;padding:4px 2px 20px;animation:fadeUp .5s ease;}
     .brand-logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;color:#fff;}
     .brand-logo .dot{width:36px;height:36px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 20px rgba(124,92,255,.45);}
     .status-pill{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#4ade80;font-size:.75rem;font-weight:700;}
     .status-pill .pulse{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 1.4s infinite;}
-
     .hero{text-align:center;padding:30px 0 10px;animation:fadeUp .6s ease;}
     .hero-badge{display:inline-block;padding:6px 16px;border-radius:999px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.35);color:#b7a6ff;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;}
     .hero-title{font-size:2.6rem;font-weight:800;color:#fff;margin:0;}
     .hero-title span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
     .hero-sub{color:var(--muted);font-size:.95rem;max-width:440px;margin:10px auto 26px;}
-
     [data-testid="stSidebar"]{background:var(--surface) !important;border-right:1px solid var(--border);}
     .profile-card{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;background:linear-gradient(145deg,rgba(124,92,255,.14),rgba(34,211,238,.07));border:1px solid rgba(124,92,255,.3);margin-bottom:8px;}
     .profile-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--grad);color:#fff;font-weight:800;font-size:1.1rem;flex-shrink:0;}
     .profile-name{color:#fff;font-weight:700;font-size:.95rem;}
     .profile-role{color:var(--muted);font-size:.72rem;letter-spacing:.04em;}
     .side-label{font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:16px 0 8px;}
-
     [data-testid="stSidebar"] .stButton>button{background:transparent !important;border:none !important;border-radius:12px !important;color:var(--text) !important;justify-content:flex-start;box-shadow:none !important;}
     [data-testid="stSidebar"] .stButton>button:hover{background:rgba(255,255,255,.06) !important;}
     [data-testid="stSidebar"] .stButton>button[kind="primary"]{background:rgba(124,92,255,.16) !important;color:#b7a6ff !important;font-weight:700 !important;}
     [data-testid="stSidebar"] .stButton>button p{white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;text-align:left !important;}
-
     .stButton>button{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:12px;font-weight:600;}
     .stButton>button:hover{border-color:rgba(124,92,255,.5);}
     .stButton>button[kind="primary"]{background:var(--grad) !important;border:none !important;color:#fff !important;font-weight:700;box-shadow:0 6px 22px rgba(124,92,255,.35);}
     .stDownloadButton>button{background:var(--grad) !important;border:none !important;color:#fff !important;border-radius:12px;font-weight:700;}
-
     .stTextInput input,.stTextInput>div>input{background:var(--input) !important;border:1px solid var(--border) !important;border-radius:12px;color:var(--text);}
     .stTabs [data-testid="stTabsSelectionBar"]{background:var(--grad);height:2px;}
     .stTabs button{color:var(--muted);font-weight:700;}
     .stTabs button[aria-selected="true"]{color:#fff;}
-
     [data-testid="stChatMessage"]{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 18px;margin-bottom:12px;animation:fadeUp .45s ease both;}
     .user-bubble{display:flex;justify-content:flex-end;margin:14px 0;animation:fadeUp .45s ease both;}
     .user-bubble .inner{max-width:82%;padding:12px 20px;border-radius:18px 18px 4px 18px;background:linear-gradient(135deg,#7c5cff,#5a3df0);color:#fff;box-shadow:0 6px 24px rgba(124,92,255,.35);white-space:pre-wrap;line-height:1.5;}
-
     .agent-chip{display:inline-flex;align-items:center;gap:8px;margin:2px 10px 2px 0;padding:6px 14px;border-radius:999px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);color:#7dd8ea;font-size:.73rem;font-weight:700;animation:fadeUp .4s ease both;}
     .agent-chip .pulse{width:6px;height:6px;border-radius:50%;background:#22d3ee;animation:pulse 1.2s infinite;}
-
     [data-testid="stChatInput"] textarea{background:var(--input) !important;border:1px solid var(--border) !important;border-radius:999px !important;padding:14px 20px !important;box-shadow:none !important;color:var(--text);}
     [data-testid="stChatInput"] textarea:focus{border-color:transparent !important;box-shadow:0 0 0 2px rgba(124,92,255,.6) !important;}
-
     pre,.stCodeBlock{background:#0f1320 !important;border:1px solid var(--border);border-radius:12px;}
     .stAlert{border-radius:12px !important;border:1px solid var(--border) !important;}
     </style>
@@ -906,8 +870,7 @@ def render_agent_chip(nama):
 
 
 def bersihkan_teks_response(teks):
-    if not teks:
-        return ""
+    if not teks: return ""
     teks = re.sub(r'<atem:.*?(</atem:function_calls>|$)', '', teks, flags=re.DOTALL)
     teks = re.sub(r'<function_calls>.*?(</function_calls>|$)', '', teks, flags=re.DOTALL)
     teks = re.sub(r'<invoke.*?(</invoke>|$)', '', teks, flags=re.DOTALL)
@@ -917,12 +880,9 @@ def bersihkan_teks_response(teks):
 
 
 def apakah_jawaban_rusak(teks):
-    if not teks:
-        return True
-    if re.search(r'(to=|atem:|function_calls|<\||<invoke)', teks, re.I):
-        return True
-    if teks.strip().lower() in ("assistant", "user", "system", "assistant to"):
-        return True
+    if not teks: return True
+    if re.search(r'(to=|atem:|function_calls|<\||<invoke)', teks, re.I): return True
+    if teks.strip().lower() in ("assistant", "user", "system", "assistant to"): return True
     return False
 
 
@@ -1224,55 +1184,37 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ========== AGENT LOOP (5 RONDE, ANTI-SPAM, FILTER RELEVANSI) ==========
+        # ========== AGENT LOOP ==========
         MAX_AGENT_LOOPS = 5
         query_sudah_dicari = set()
 
         for loop_idx in range(MAX_AGENT_LOOPS):
             try:
                 agent_response = panggil_api_dengan_retry(
-                    client,
-                    model=selected_model,
-                    messages=payload_khusus_api,
-                    tools=LAGOS_TOOLS,
-                    tool_choice="auto",
-                    max_tokens=1500
+                    client, model=selected_model, messages=payload_khusus_api,
+                    tools=LAGOS_TOOLS, tool_choice="auto", max_tokens=1500
                 )
 
                 response_message = agent_response.choices[0].message
 
                 if not response_message.tool_calls:
                     if response_message.content:
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": response_message.content
-                        })
+                        st.session_state.messages.append({"role": "assistant", "content": response_message.content})
                     break
 
                 tc_list = response_message.tool_calls[:3]
 
                 st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": tc.type,
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in tc_list
-                    ]
+                    "role": "assistant", "content": None,
+                    "tool_calls": [{"id": tc.id, "type": tc.type,
+                                    "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                   for tc in tc_list]
                 })
-
                 payload_khusus_api.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": tc.type,
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in tc_list
-                    ]
+                    "role": "assistant", "content": None,
+                    "tool_calls": [{"id": tc.id, "type": tc.type,
+                                    "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                   for tc in tc_list]
                 })
 
                 for t_call in tc_list:
@@ -1292,7 +1234,7 @@ def main():
                         query_asli = func_args.get("query", "")
                         query_key = query_asli.strip().lower()
                         if query_key in query_sudah_dicari:
-                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari sebelumnya. JANGAN ulangi. Jawab sekarang berdasarkan hasil yang ada, atau katakan Informasi tidak ditemukan."
+                            hasil_fungsi = "Pesan Sistem: Query ini SUDAH dicari. JANGAN ulangi. Jawab sekarang berdasarkan hasil yang ada, atau gunakan pengetahuan internal Anda."
                         else:
                             query_sudah_dicari.add(query_key)
                             st.info(f"🔍 Mencari: '{query_asli}'...")
@@ -1315,12 +1257,7 @@ def main():
                         st.info(f"🧮 Menghitung: {func_args.get('ekspresi', '')}...")
                         hasil_fungsi = AgentTools.hitung_matematika(func_args.get("ekspresi", ""))
 
-                    tool_msg = {
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": func_name,
-                        "content": str(hasil_fungsi),
-                    }
+                    tool_msg = {"tool_call_id": tool_call.id, "role": "tool", "name": func_name, "content": str(hasil_fungsi)}
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
@@ -1342,23 +1279,14 @@ def main():
             try:
                 try:
                     response_stream = panggil_api_dengan_retry(
-                        client,
-                        model=selected_model,
-                        messages=payload_khusus_api,
-                        tools=LAGOS_TOOLS,
-                        tool_choice="none",
-                        temperature=0.7,
-                        max_tokens=4000,
-                        stream=True
+                        client, model=selected_model, messages=payload_khusus_api,
+                        tools=LAGOS_TOOLS, tool_choice="none",
+                        temperature=0.7, max_tokens=4000, stream=True
                     )
                 except Exception:
                     response_stream = panggil_api_dengan_retry(
-                        client,
-                        model=selected_model,
-                        messages=payload_khusus_api,
-                        temperature=0.7,
-                        max_tokens=4000,
-                        stream=True
+                        client, model=selected_model, messages=payload_khusus_api,
+                        temperature=0.7, max_tokens=4000, stream=True
                     )
 
                 for chunk in response_stream:
@@ -1370,17 +1298,14 @@ def main():
 
                 full_response = bersihkan_teks_response(full_response)
 
-                # REPAIR CALL: perbaiki jawaban rusak sekali lagi
                 if apakah_jawaban_rusak(full_response):
                     try:
                         repair = panggil_api_dengan_retry(
-                            client,
-                            model=selected_model,
+                            client, model=selected_model,
                             messages=payload_khusus_api + [
-                                {"role": "user", "content": "Sistem: jawaban sebelumnya rusak. Berdasarkan HASIL ALAT di atas saja, tulis jawaban akhir sekarang dalam markdown bersih dan relevan. Jika data tidak ada/tidak relevan, tulis tepat: Informasi tidak ditemukan."}
+                                {"role": "user", "content": "Sistem: jawaban sebelumnya rusak. Berdasarkan HASIL ALAT di atas atau pengetahuan Anda, tulis jawaban akhir sekarang dalam markdown bersih. Jika benar-benar tidak tahu, tulis: Informasi tidak ditemukan."}
                             ],
-                            temperature=0.3,
-                            max_tokens=2000
+                            temperature=0.3, max_tokens=2000
                         )
                         teks_repair = bersihkan_teks_response(repair.choices[0].message.content or "")
                         if teks_repair and not apakah_jawaban_rusak(teks_repair):
@@ -1389,7 +1314,7 @@ def main():
                         pass
 
                 if apakah_jawaban_rusak(full_response):
-                    full_response = "Maaf, saya tidak menemukan informasi yang relevan untuk pertanyaan ini. Silakan coba kata kunci yang lebih spesifik. 🙏"
+                    full_response = "Maaf, saya tidak dapat memproses jawaban dengan stabil saat ini. Silakan ulangi pertanyaan Anda. 🙏"
 
                 placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
