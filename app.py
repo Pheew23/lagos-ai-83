@@ -11,6 +11,7 @@ import copy
 import time
 from urllib.parse import urljoin, urlparse, parse_qs, unquote, quote
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 from html import escape as html_escape
 
@@ -51,6 +52,9 @@ HTTP.headers.update({
     'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
 })
 
+# Timeout seragam & cepat
+HTTP_TIMEOUT = 10
+
 def panggil_api_dengan_retry(client_instance, **kwargs):
     max_retries = 4
     for attempt in range(max_retries):
@@ -69,31 +73,31 @@ LAGOS_TOOLS = [
     {"type": "function", "function": {
         "name": "ambil_data_pasar",
         "description": "Gunakan alat ini untuk mengambil data harga saham (.JK) atau kripto (-USD).",
-        "parameters": {"type": "object", "properties": {"simbol_ticker": {"type": "string", "description": "Simbol saham (.JK) atau kripto (-USD)."}}, "required": ["simbol_ticker"]}}},
+        "parameters": {"type": "object", "properties": {"simbol_ticker": {"type": "string"}}, "required": ["simbol_ticker"]}}},
     {"type": "function", "function": {
         "name": "cari_informasi_web",
-        "description": "Cari berita/fakta/informasi terkini dari internet (7 mesin pencari + filter relevansi). Hasil berisi JUDUL, URL, RINGKASAN.",
-        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Kata kunci singkat & padat."}}, "required": ["query"]}}},
+        "description": "Cari berita/fakta/informasi terkini dari internet (multi-mesin paralel). Hasil berisi JUDUL, URL, RINGKASAN.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "baca_isi_website",
         "description": "Baca isi lengkap halaman dari URL dalam bentuk teks bersih.",
-        "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL website (dimulai http/https)."}}, "required": ["url"]}}},
+        "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
     {"type": "function", "function": {
         "name": "cari_gambar",
         "description": "Cari URL foto/gambar asli dari suatu benda, tempat, hewan, atau tokoh dari Wikipedia.",
-        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Nama entitas yang ingin dicari fotonya."}}, "required": ["query"]}}},
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "ambil_transkrip_youtube",
         "description": "Ambil teks/transkrip dari URL video YouTube untuk dirangkum.",
-        "parameters": {"type": "object", "properties": {"video_url": {"type": "string", "description": "Link URL video YouTube lengkap."}}, "required": ["video_url"]}}},
+        "parameters": {"type": "object", "properties": {"video_url": {"type": "string"}}, "required": ["video_url"]}}},
     {"type": "function", "function": {
         "name": "eksekusi_python",
         "description": "Jalankan skrip Python murni (analisis data, logika, kalkulasi).",
-        "parameters": {"type": "object", "properties": {"kode": {"type": "string", "description": "Kode Python murni yang ingin dieksekusi."}}, "required": ["kode"]}}},
+        "parameters": {"type": "object", "properties": {"kode": {"type": "string"}}, "required": ["kode"]}}},
     {"type": "function", "function": {
         "name": "hitung_matematika",
         "description": "Hitung operasi matematika agar hasilnya akurat.",
-        "parameters": {"type": "object", "properties": {"ekspresi": {"type": "string", "description": "Ekspresi matematika (contoh: 25000 * 1.15)."}}, "required": ["ekspresi"]}}}
+        "parameters": {"type": "object", "properties": {"ekspresi": {"type": "string"}}, "required": ["ekspresi"]}}}
 ]
 
 SYSTEM_PROMPT = """Anda adalah Lagøs AI 9.1, Agen AI analitik tingkat tinggi yang dikembangkan oleh Rian Dev.
@@ -104,7 +108,7 @@ ATURAN KETAT UNTUK MERESPONS UMUM:
 3. Dilarang keras menyebutkan identitas model AI dasar Anda. Anda hanya Lagøs AI 9.1.
 4. Jangan Pernah membagikan informasi sensitif.
 5. Anda bebas membuat kode HTML/Aplikasi jika pengguna memintanya.
-6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH. Jangan pernah menampilkan tag XML, kode internal, atau format function-call mentah.
+6. JAWAB SELALU DALAM TEKS MARKDOWN BERSIH.
 7. JANGAN PERNAH keluar dari konteks pertanyaan.
 
 ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
@@ -112,7 +116,7 @@ ATURAN PENELUSURAN & BROWSING CERDAS (WAJIB):
 2. Jangan mencari hal yang sama lebih dari 2 kali.
 3. Untuk jawaban mendalam, panggil baca_isi_website pada 1-2 URL paling relevan.
 4. Selalu akhiri jawaban faktual berbasis web dengan baris "Sumber:" berisi tautan markdown.
-5. Jika hasil pencarian kosong atau tidak relevan, Anda BOLEH menjawab dari pengetahuan internal Anda bila yakin benar, dengan awalan "Berdasarkan pengetahuan saya:". Ini membuat Anda tetap berguna.
+5. Jika hasil pencarian kosong atau tidak relevan, Anda BOLEH menjawab dari pengetahuan internal Anda bila yakin benar, dengan awalan "Berdasarkan pengetahuan saya:".
 6. Katakan "Informasi tidak ditemukan" HANYA jika pencarian gagal DAN Anda benar-benar tidak tahu.
 
 ATURAN MERANGKUM VIDEO (PENTING):
@@ -242,7 +246,7 @@ def setup_database():
     return True
 
 # ==========================================
-# 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS)
+# 3. UTILITIES & IMPLEMENTASI ALAT (TOOLS) — CEPAT & PARALEL
 # ==========================================
 class AgentTools:
 
@@ -308,130 +312,154 @@ class AgentTools:
             if judul and url.startswith("http"): hasil.append((judul, url, snippet))
         return hasil
 
-    # ---------- 7 MESIN PENCARI ----------
+    # ---------- MESIN PENCARI (semua timeout 10 detik, return aman) ----------
     @staticmethod
     def _mesin_ddg_html(query):
-        r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=15)
-        if r.status_code == 200:
-            return AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser"))
+        try:
+            r = HTTP.get("https://html.duckduckgo.com/html/", params={"q": query}, timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                return AgentTools._parse_ddg_html(BeautifulSoup(r.text, "html.parser"))
+        except: pass
         return []
 
     @staticmethod
     def _mesin_ddg_lite(query):
         out = []
-        r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=15)
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.text, "html.parser")
-            for tr in soup.find_all("tr"):
-                td = tr.find("td", class_="result-snippet")
-                if td: out.append(("", "", td.get_text(" ", strip=True)))
+        try:
+            r = HTTP.post("https://lite.duckduckgo.com/lite/", data={"q": query}, timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, "html.parser")
+                for tr in soup.find_all("tr"):
+                    td = tr.find("td", class_="result-snippet")
+                    if td: out.append(("", "", td.get_text(" ", strip=True)))
+        except: pass
         return out
 
     @staticmethod
     def _mesin_ddg_api(query):
         out = []
-        d = HTTP.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "no_html": 1}, timeout=10).json()
-        abstract = d.get("AbstractText") or ""
-        if abstract: out.append((d.get("Heading", ""), d.get("FirstURL", ""), abstract))
-        for t in d.get("RelatedTopics", [])[:3]:
-            if isinstance(t, dict) and t.get("Text"):
-                out.append(("", t.get("FirstURL", ""), t["Text"]))
+        try:
+            d = HTTP.get("https://api.duckduckgo.com/", params={"q": query, "format": "json", "no_html": 1}, timeout=HTTP_TIMEOUT).json()
+            abstract = d.get("AbstractText") or ""
+            if abstract: out.append((d.get("Heading", ""), d.get("FirstURL", ""), abstract))
+            for t in d.get("RelatedTopics", [])[:3]:
+                if isinstance(t, dict) and t.get("Text"):
+                    out.append(("", t.get("FirstURL", ""), t["Text"]))
+        except: pass
         return out
 
     @staticmethod
     def _mesin_bing(query):
         out = []
-        r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 10}, timeout=15)
-        if r.status_code == 200:
-            for j, u, s in AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser")):
-                out.append((j, AgentTools._decode_bing_url(u), s))
+        try:
+            r = HTTP.get("https://www.bing.com/search", params={"q": query, "count": 10}, timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                for j, u, s in AgentTools._parse_bing(BeautifulSoup(r.text, "html.parser")):
+                    out.append((j, AgentTools._decode_bing_url(u), s))
+        except: pass
         return out
 
     @staticmethod
     def _mesin_yahoo(query):
         out = []
-        r = HTTP.get("https://search.yahoo.com/search", params={"p": query}, timeout=15)
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.text, "html.parser")
-            for h3 in soup.select("h3.title")[:8]:
-                a = h3.find("a")
-                if not a: continue
-                li = h3.find_parent("li")
-                p = li.find("p") if li else None
-                out.append((a.get_text(" ", strip=True), a.get("href", ""), p.get_text(" ", strip=True) if p else ""))
+        try:
+            r = HTTP.get("https://search.yahoo.com/search", params={"p": query}, timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, "html.parser")
+                for h3 in soup.select("h3.title")[:8]:
+                    a = h3.find("a")
+                    if not a: continue
+                    li = h3.find_parent("li")
+                    p = li.find("p") if li else None
+                    out.append((a.get_text(" ", strip=True), a.get("href", ""), p.get_text(" ", strip=True) if p else ""))
+        except: pass
         return out
 
     @staticmethod
     def _mesin_jina(query):
         out = []
-        r = HTTP.get("https://s.jina.ai/" + quote(query), timeout=20)
-        if r.status_code == 200:
-            for m in re.finditer(r"###\s*(.+?)\n\s*URL:\s*(\S+)(.*?)(?=###|\Z)", r.text, re.S):
-                judul, url, isi = m.group(1).strip(), m.group(2).strip(), re.sub(r"\s+", " ", m.group(3)).strip()
-                out.append((judul, url, isi[:400]))
+        try:
+            r = HTTP.get("https://s.jina.ai/" + quote(query), timeout=HTTP_TIMEOUT)
+            if r.status_code == 200:
+                for m in re.finditer(r"###\s*(.+?)\n\s*URL:\s*(\S+)(.*?)(?=###|\Z)", r.text, re.S):
+                    judul, url, isi = m.group(1).strip(), m.group(2).strip(), re.sub(r"\s+", " ", m.group(3)).strip()
+                    out.append((judul, url, isi[:400]))
+        except: pass
         return out
 
     @staticmethod
     def _mesin_wiki(query):
-        return AgentTools._fallback_wikipedia(query)
+        out = []
+        try:
+            for lang in ("id", "en"):
+                try:
+                    s = HTTP.get(f"https://{lang}.wikipedia.org/w/api.php",
+                                 params={"action": "opensearch", "search": query, "limit": 1, "format": "json"},
+                                 timeout=HTTP_TIMEOUT).json()
+                    if not s[1]: continue
+                    title = s[1][0]
+                    summ = HTTP.get(
+                        f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
+                        timeout=HTTP_TIMEOUT).json()
+                    extract = summ.get("extract", "")
+                    url = summ.get("content_urls", {}).get("desktop", {}).get("page", "")
+                    if extract:
+                        out.append((f"Wikipedia: {title}", url, extract))
+                        break
+                except: continue
+        except: pass
+        return out
 
-    @staticmethod
-    def _fallback_wikipedia(query: str) -> List[tuple]:
-        for lang in ("id", "en"):
-            try:
-                s = HTTP.get(f"https://{lang}.wikipedia.org/w/api.php",
-                             params={"action": "opensearch", "search": query, "limit": 1, "format": "json"},
-                             timeout=10).json()
-                if not s[1]: continue
-                title = s[1][0]
-                summ = HTTP.get(
-                    f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
-                    timeout=10).json()
-                extract = summ.get("extract", "")
-                url = summ.get("content_urls", {}).get("desktop", {}).get("page", "")
-                if extract: return [(f"Wikipedia: {title}", url, extract)]
-            except: continue
-        return []
-
+    # ---------- ORCHESTRATOR PARALEL ----------
     @staticmethod
     def cari_informasi_web(query: str) -> str:
         qtoks = AgentTools._token_query(query)
         kandidat = []
 
-        for engine in ("ddg_html", "jina", "bing", "yahoo", "ddg_lite", "ddg_api", "wiki"):
-            try:
-                mentah = getattr(AgentTools, "_mesin_" + engine)(query)
-            except Exception:
-                mentah = []
-            for judul, url, snippet in mentah:
-                skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
-                if skor >= 1:
-                    kandidat.append((skor, judul, url, snippet))
-            if len(kandidat) >= 3:
-                break
-
-        # Ekspansi query: coba kata-kata terpenting saja
-        if not kandidat:
-            pendek = " ".join(sorted(qtoks, key=len, reverse=True)[:3])
-            if pendek:
-                for engine in ("bing", "ddg_html", "yahoo"):
-                    try:
-                        mentah = getattr(AgentTools, "_mesin_" + engine)(pendek)
-                    except Exception:
-                        mentah = []
+        # Putaran 1: 4 mesin utama DIJALANKAN BERSAMAAN
+        batch_1 = ["ddg_html", "jina", "bing", "ddg_api"]
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(getattr(AgentTools, "_mesin_" + e), query): e for e in batch_1}
+            for future in as_completed(futures):
+                try:
+                    mentah = future.result()
                     for judul, url, snippet in mentah:
-                        if AgentTools._skor_relevan(qtoks, judul + " " + snippet) >= 2:
-                            kandidat.append((3, judul, url, snippet))
-                    if kandidat: break
+                        skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
+                        if skor >= 1:
+                            kandidat.append((skor, judul, url, snippet))
+                except: pass
+
+        # Putaran 2: jika masih kurang, tambah 3 mesin lagi BERSAMAAN
+        if len(kandidat) < 3:
+            batch_2 = ["yahoo", "ddg_lite", "wiki"]
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {executor.submit(getattr(AgentTools, "_mesin_" + e), query): e for e in batch_2}
+                for future in as_completed(futures):
+                    try:
+                        mentah = future.result()
+                        for judul, url, snippet in mentah:
+                            skor = AgentTools._skor_relevan(qtoks, judul + " " + snippet)
+                            if skor >= 1:
+                                kandidat.append((skor, judul, url, snippet))
+                    except: pass
 
         if not kandidat:
             return (f"Pesan Sistem: Pencarian web tidak menemukan hasil relevan untuk '{query}'. "
                     f"Jika Anda yakin dengan pengetahuan internal Anda, jawab dengan awalan 'Berdasarkan pengetahuan saya:'. "
                     f"Jika tidak tahu sama sekali, katakan: Informasi tidak ditemukan.")
 
-        kandidat.sort(key=lambda x: x[0], reverse=True)
+        # Deduplicate by URL
+        seen_urls = set()
+        unik = []
+        for item in kandidat:
+            url = item[2]
+            if url and url in seen_urls: continue
+            if url: seen_urls.add(url)
+            unik.append(item)
+
+        unik.sort(key=lambda x: x[0], reverse=True)
         out = [f'HASIL PENCARIAN WEB untuk "{query}":']
-        for i, (skor, judul, url, snippet) in enumerate(kandidat[:5], 1):
+        for i, (skor, judul, url, snippet) in enumerate(unik[:5], 1):
             baris = f"{i}. {judul}" if judul else f"{i}."
             if url: baris += f"\n   URL: {url}"
             if snippet: baris += f"\n   Ringkasan: {snippet[:300]}"
@@ -445,12 +473,12 @@ class AgentTools:
             for lang in ("id", "en"):
                 s = HTTP.get(f"https://{lang}.wikipedia.org/w/api.php",
                              params={"action": "opensearch", "search": query, "limit": 1, "format": "json"},
-                             timeout=10).json()
+                             timeout=HTTP_TIMEOUT).json()
                 if not s[1]: continue
                 title = s[1][0]
                 summ = HTTP.get(
                     f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}",
-                    timeout=10).json()
+                    timeout=HTTP_TIMEOUT).json()
                 img = (summ.get("originalimage") or summ.get("thumbnail") or {}).get("source")
                 if img: return f"Pesan Sistem: Foto '{title}' ditemukan. Tampilkan dengan: ![{title}]({img})"
             return f"Pesan Sistem: Tidak menemukan foto untuk '{query}'."
@@ -637,7 +665,7 @@ class MediaUtils:
     @staticmethod
     def _ambil_via_jina(url: str) -> Optional[str]:
         try:
-            r = HTTP.get(f"https://r.jina.ai/{url}", timeout=25)
+            r = HTTP.get(f"https://r.jina.ai/{url}", timeout=HTTP_TIMEOUT)
             if r.status_code == 200 and len(r.text) > 200:
                 teks = r.text
                 for prefix in ["Title:", "URL Source:", "Markdown Content:", "Published Time:"]:
@@ -654,7 +682,7 @@ class MediaUtils:
     @staticmethod
     def _ambil_via_allorigins(url: str) -> Optional[str]:
         try:
-            r = HTTP.get(f"https://api.allorigins.win/raw?url={quote(url, safe='')}", timeout=20)
+            r = HTTP.get(f"https://api.allorigins.win/raw?url={quote(url, safe='')}", timeout=HTTP_TIMEOUT)
             if r.status_code == 200 and len(r.text) > 200: return r.text
         except: pass
         return None
@@ -662,7 +690,7 @@ class MediaUtils:
     @staticmethod
     def _ambil_langsung(url: str) -> Optional[str]:
         try:
-            r = HTTP.get(url, timeout=15, allow_redirects=True)
+            r = HTTP.get(url, timeout=HTTP_TIMEOUT, allow_redirects=True)
             if r.status_code in [403, 401, 406, 429]: return None
             r.raise_for_status()
             return r.text
@@ -704,10 +732,14 @@ class MediaUtils:
     def ambil_teks_dari_link(url: str) -> str:
         try:
             if not url.startswith('http'): url = 'https://' + url
+            # Jina dulu (tercepat & paling bersih)
             html = MediaUtils._ambil_via_jina(url)
             if html: return f"[ISI HALAMAN: {url}]\n{html[:12000]}"
-            html = MediaUtils._ambil_langsung(url)
-            if not html: html = MediaUtils._ambil_via_allorigins(url)
+            # Paralel fallback: langsung + allorigins
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f1 = executor.submit(MediaUtils._ambil_langsung, url)
+                f2 = executor.submit(MediaUtils._ambil_via_allorigins, url)
+                html = f1.result() or f2.result()
             if not html: return f"Pesan Sistem: Gagal akses {url}. Website mungkin diblokir."
             if len(html) < 200: return f"Pesan Sistem: {url} kosong."
             konten = MediaUtils._ekstrak_konten_bersih(html, url)
@@ -1161,8 +1193,15 @@ def main():
             if _apakah_url_valid(u) and u not in semua_url:
                 semua_url.append(u)
 
-        for url in semua_url[:3]:
-            teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {url}]\n{MediaUtils.ambil_teks_dari_link(url)}\n"
+        # Ambil URL paralel juga
+        if semua_url[:3]:
+            with ThreadPoolExecutor(max_workers=min(3, len(semua_url))) as executor:
+                future_map = {executor.submit(MediaUtils.ambil_teks_dari_link, u): u for u in semua_url[:3]}
+                for future in as_completed(future_map):
+                    u = future_map[future]
+                    try:
+                        teks_tambahan += f"\n[ISI WEBSITE TERKONEKSI: {u}]\n{future.result()}\n"
+                    except: pass
 
         if st.session_state.temp_image:
             base64_img = MediaUtils.konversi_gambar_ke_base64(st.session_state.temp_image)
@@ -1184,7 +1223,7 @@ def main():
         else:
             payload_khusus_api[-1]["content"] = final_prompt_api
 
-        # ========== AGENT LOOP ==========
+        # ========== AGENT LOOP (LOOP TETAP 5, tapi delay dikurangi) ==========
         MAX_AGENT_LOOPS = 5
         query_sudah_dicari = set()
 
@@ -1261,7 +1300,7 @@ def main():
                     st.session_state.messages.append(tool_msg)
                     payload_khusus_api.append(tool_msg)
 
-                time.sleep(1.5)
+                time.sleep(0.6)  # dikurangi dari 1.5
 
             except Exception as e:
                 st.error(f"Error pada loop agent: {str(e)}")
