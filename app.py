@@ -1180,7 +1180,7 @@ def main():
             payload_khusus_api[-1]["content"] = final_prompt_api
 
         # ========== AGENT LOOP (DIBATASI ANTI-SPAM) ==========
-        MAX_AGENT_LOOPS = 2
+        MAX_AGENT_LOOPS = 5
         hasil_tool_semua = []
         query_sudah_dicari = set()
 
@@ -1205,7 +1205,7 @@ def main():
                         })
                     break
 
-                tc_list = response_message.tool_calls[:2]
+                tc_list = response_message.tool_calls[:3]
 
                 st.session_state.messages.append({
                     "role": "assistant",
