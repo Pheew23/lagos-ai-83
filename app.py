@@ -32,12 +32,12 @@ from audio_recorder_streamlit import audio_recorder
 # ==========================================
 DB_NAME = 'lagos_multiuser.db'
 API_KEY = st.secrets["NVIDIA_API_KEY"]
-BASE_URL = "https://integrate.api.nvidia.com/v1"
+BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 B3 = "`" * 3
 
 MODEL_MAPPING = {
-    "meta/muse-glimmer-30b": "1. Aether (Flash)",
+    "minimax/minimax-m3:free": "1. Aether (Flash)",
     "google/diffusiongemma-26b-a4b-it": "2. Verper (pro)",
     "nvidia/nemotron-3.5-lightning-30b-a3b": "3. Numayr(Eksklusif)",
     "thinkingmachines/inkling": "4. Nova (Unstable)",
